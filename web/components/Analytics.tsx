@@ -29,7 +29,7 @@ export function Analytics() {
       }, 1000);
     }
   }, [pathname, searchParams]);
-
+  
   // Track time on page
   useEffect(() => {
     const startTime = Date.now();

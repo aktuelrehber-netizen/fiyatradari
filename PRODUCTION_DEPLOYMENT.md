@@ -135,7 +135,7 @@ sudo fail2ban-client status
 ### Swap Oluştur (Önerilen - 4GB RAM altıysa)
 ```bash
 # 2GB swap:
-sudo fallocate -l 2G /swapfile
+sudo fallocate -l 4G /swapfile
 sudo chmod 600 /swapfile
 sudo mkswap /swapfile
 sudo swapon /swapfile
@@ -218,6 +218,7 @@ ssh-keygen -t ed25519 -C "production-server"
 
 # Public key'i göster:
 cat ~/.ssh/id_ed25519.pub
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPeSv1fhpGbRXAC+13Vs4kvxPCJHkHS8J0rNYUml7oBN production-server
 
 # GitHub'da:
 # Settings → SSH Keys → New SSH key
@@ -237,14 +238,14 @@ cd /var/www
 
 # Git clone (HTTPS veya SSH):
 # HTTPS:
-sudo git clone https://github.com/KULLANICI_ADINIZ/fiyatradari.git
+sudo git clone https://github.com/aktuelrehber-netizen/fiyatradari.git
 
 # veya SSH (önerilen):
-sudo git clone git@github.com:KULLANICI_ADINIZ/fiyatradari.git
+sudo git clone git@github.com:aktuelrehber-netizen/fiyatradari.git
 
 # İzinleri ayarla:
 sudo chown -R $USER:$USER /var/www/fiyatradari
-cd /var/www/fiyatradari
+    cd /var/www/fiyatradari
 ```
 
 ---
@@ -302,13 +303,16 @@ SMTP_PASSWORD=<app-password>
 ```bash
 # PostgreSQL şifresi:
 openssl rand -base64 32
+i+mgazu+AAMnbtB67DC3R43qNBim5/3Qjrv/t6tGhRs=
 
 # SECRET_KEY:
 openssl rand -hex 32
+21fc1021203d4a31117b3c756f0325e8f0797824eb151c93f21df696d3104fa5
 
 # Grafana şifresi:
 openssl rand -base64 24
 ```
+LtnLXt4PRZ9tybcxItEtM7bHL5/yAbnO
 
 ### .env Güvenliği
 ```bash
@@ -383,7 +387,7 @@ sudo systemctl start nginx
 ### Nginx Yapılandırması
 ```bash
 # Ana config dosyası:
-sudo nano /etc/nginx/sites-available/fiyatradari.com
+sudo nano /etc/nginx/sites-available/firsatradari.com
 
 # İçerik:
 ```
@@ -466,10 +470,10 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name admin.fiyatradari.com;
+    server_name admin.firsatradari.com;
     
-    ssl_certificate /etc/letsencrypt/live/fiyatradari.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/fiyatradari.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/firsatradari.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/firsatradari.com/privkey.pem;
     
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
@@ -998,3 +1002,15 @@ http {
 5. Database replication (gelecekte)
 
 **Production deployment başarıyla tamamlandı! 🎉**
+
+
+
+
+
+
+# Docker servisleri restart et:
+docker compose down
+docker compose up -d
+
+# Kontrol:
+docker compose ps
