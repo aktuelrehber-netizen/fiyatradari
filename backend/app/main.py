@@ -80,7 +80,7 @@ app.add_middleware(
 if settings.ENVIRONMENT == "production":
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["yourdomain.com", "*.yourdomain.com"]
+        allowed_hosts=["*"]  # Allow all hosts (can be restricted to specific domains later)
     )
 
 # 5. GZip compression for responses
