@@ -87,9 +87,6 @@ export default function LoginPage() {
               {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
             </Button>
           </form>
-          <div className="mt-4 text-xs text-center text-muted-foreground">
-            Varsayılan: admin / admin123
-          </div>
         </CardContent>
       </Card>
     </div>
