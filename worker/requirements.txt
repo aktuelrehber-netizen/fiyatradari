@@ -1,0 +1,32 @@
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# Amazon PA API
+python-amazon-paapi==5.0.1
+
+# Telegram
+python-telegram-bot==20.7
+
+# HTTP Client
+httpx==0.25.2
+requests==2.31.0
+
+# Retry & Rate Limiting
+tenacity==8.2.3
+
+# Utilities
+python-dotenv==1.0.0
+python-dateutil==2.8.2
+schedule==1.2.0
+
+# Logging
+loguru==0.7.2
+
+# Performance
+redis==5.0.1
+
+# Celery (Distributed Task Queue)
+celery==5.3.4
+kombu==5.3.4  # Message queue library
+flower==2.0.1  # Celery monitoring tool

@@ -1,0 +1,581 @@
+"""
+Celery Tasks for Distributed Processing
+Individual tasks for 1M+ product handling
+"""
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import List, Dict, Optional
+from loguru import logger
+from celery import group, chord, chain
+from sqlalchemy import or_
+
+from celery_app import app
+from database import get_db, Product, PriceHistory, Deal, WorkerLog, Category
+from services.amazon_client import AmazonPAAPIClient
+from services.deal_detector import DealDetector
+from config import config
+
+
+# ============================================================================
+# INDIVIDUAL PRODUCT TASKS
+# ============================================================================
+
+@app.task(bind=True, max_retries=3, default_retry_delay=60)
+def check_product_price(self, product_id: int, priority: int = 5) -> Dict:
+    """
+    Check price for a single product
+    
+    Args:
+        product_id: Product ID to check
+        priority: Task priority (0-10, higher = more important)
+    
+    Returns:
+        Result dict with status and metrics
+    """
+    try:
+        amazon_client = AmazonPAAPIClient()
+        deal_detector = DealDetector(deal_threshold_percentage=config.DEAL_THRESHOLD_PERCENTAGE)
+        
+        with get_db() as db:
+            # Get product
+            product = db.query(Product).filter(Product.id == product_id).first()
+            if not product:
+                logger.warning(f"Product {product_id} not found")
+                return {"status": "not_found", "product_id": product_id}
+            
+            # Fetch current price from Amazon
+            items = amazon_client.get_items([product.asin])
+            if not items:
+                logger.warning(f"No data from Amazon for {product.asin}")
+                product.last_checked_at = datetime.utcnow()
+                product.check_count = (product.check_count or 0) + 1
+                db.commit()
+                return {"status": "no_data", "product_id": product_id, "asin": product.asin}
+            
+            item_data = items[0]
+            old_price = product.current_price
+            new_price = Decimal(str(item_data['current_price'])) if item_data.get('current_price') else None
+            
+            if not new_price:
+                product.is_available = False
+                product.last_checked_at = datetime.utcnow()
+                product.check_count = (product.check_count or 0) + 1
+                db.commit()
+                return {"status": "unavailable", "product_id": product_id, "asin": product.asin}
+            
+            # Update product
+            product.current_price = new_price
+            product.is_available = item_data.get('is_available', True)
+            product.last_checked_at = datetime.utcnow()
+            product.check_count = (product.check_count or 0) + 1
+            
+            # Track price change
+            price_changed = False
+            if old_price and abs(new_price - old_price) > Decimal('0.01'):
+                price_changed = True
+                change_pct = float((new_price - old_price) / old_price * 100)
+                
+                # Record price history
+                history = PriceHistory(
+                    product_id=product.id,
+                    price=new_price,
+                    is_available=product.is_available,
+                    recorded_at=datetime.utcnow()
+                )
+                db.add(history)
+                
+                logger.info(f"Price changed for {product.asin}: {old_price} -> {new_price} ({change_pct:+.1f}%)")
+            
+            # Check for deals
+            is_deal, deal_info = deal_detector.analyze_product(product, db)
+            deal_created = False
+            
+            if is_deal:
+                created, deal = deal_detector.create_or_update_deal(product, deal_info, db)
+                deal_created = created
+                deal_id_for_notification = deal.id if created else None
+                if created:
+                    logger.success(f"New deal created for {product.asin}: {deal_info['discount_vs_avg']:.1f}% off")
+            
+            db.commit()
+            
+            # Send Telegram notification immediately for new deals (after commit)
+            if deal_created and deal_id_for_notification:
+                try:
+                    app.send_task('celery_tasks.send_deal_notification', args=[deal_id_for_notification], countdown=5)
+                    logger.info(f"Telegram notification scheduled for deal {deal_id_for_notification}")
+                except Exception as e:
+                    logger.warning(f"Could not schedule telegram notification: {e}")
+            
+            return {
+                "status": "success",
+                "product_id": product_id,
+                "asin": product.asin,
+                "old_price": float(old_price) if old_price else None,
+                "new_price": float(new_price),
+                "price_changed": price_changed,
+                "deal_created": deal_created,
+                "is_deal": is_deal
+            }
+            
+    except Exception as e:
+        logger.error(f"Error checking product {product_id}: {e}")
+        raise self.retry(exc=e)
+
+
+@app.task(bind=True, max_retries=2)
+def fetch_category_products(self, category_id: int, browse_node_id: str, page: int = 1) -> Dict:
+    """
+    Fetch products from Amazon for a category
+    
+    Args:
+        category_id: Category ID
+        browse_node_id: Amazon browse node ID
+        page: Page number
+    """
+    try:
+        amazon_client = AmazonPAAPIClient()
+        
+        with get_db() as db:
+            category = db.query(Category).filter(Category.id == category_id).first()
+            if not category or not category.is_active:
+                return {"status": "category_not_active", "category_id": category_id}
+            
+            # Fetch products from Amazon
+            items = amazon_client.search_items_by_browse_node(
+                browse_node_id=browse_node_id,
+                page=page,
+                items_per_page=10,
+                selection_rules=category.selection_rules
+            )
+            
+            items_created = 0
+            items_updated = 0
+            
+            for item_data in items:
+                asin = item_data.get('asin')
+                if not asin:
+                    continue
+                
+                # Check if product exists
+                product = db.query(Product).filter(Product.asin == asin).first()
+                
+                if product:
+                    # Update existing
+                    product.current_price = Decimal(str(item_data['current_price'])) if item_data.get('current_price') else None
+                    product.is_available = item_data.get('is_available', True)
+                    product.last_checked_at = datetime.utcnow()
+                    items_updated += 1
+                else:
+                    # Create new
+                    product = Product(
+                        asin=asin,
+                        title=item_data.get('title', '')[:500],
+                        brand=item_data.get('brand'),
+                        current_price=Decimal(str(item_data['current_price'])) if item_data.get('current_price') else None,
+                        currency=item_data.get('currency', 'TRY'),
+                        image_url=item_data.get('image_url'),
+                        rating=item_data.get('rating'),
+                        review_count=item_data.get('review_count'),
+                        is_available=item_data.get('is_available', True),
+                        category_id=category_id,
+                        amazon_data=item_data,
+                        last_checked_at=datetime.utcnow()
+                    )
+                    db.add(product)
+                    items_created += 1
+            
+            db.commit()
+            
+            return {
+                "status": "success",
+                "category_id": category_id,
+                "page": page,
+                "items_created": items_created,
+                "items_updated": items_updated
+            }
+            
+    except Exception as e:
+        logger.error(f"Error fetching category {category_id} products: {e}")
+        raise self.retry(exc=e)
+
+
+@app.task(bind=True, max_retries=3)
+def send_deal_notification(self, deal_id: int) -> Dict:
+    """
+    Send Telegram notification for a deal
+    
+    Args:
+        deal_id: Deal ID
+    """
+    try:
+        from jobs.telegram_sender import TelegramSender
+        
+        with get_db() as db:
+            deal = db.query(Deal).filter(Deal.id == deal_id).first()
+            if not deal:
+                return {"status": "not_found", "deal_id": deal_id}
+            
+            if deal.telegram_sent:
+                return {"status": "already_sent", "deal_id": deal_id}
+            
+            # Send notification
+            telegram_sender = TelegramSender()
+            if not telegram_sender.enabled:
+                return {"status": "telegram_not_configured", "deal_id": deal_id}
+            
+            # Get product
+            product = deal.product
+            if not product:
+                return {"status": "product_not_found", "deal_id": deal_id}
+            
+            # Send
+            success = telegram_sender._send_deal(deal, db)
+            
+            if success:
+                deal.telegram_sent = True
+                deal.telegram_sent_at = datetime.utcnow()
+                db.commit()
+                return {"status": "success", "deal_id": deal_id}
+            else:
+                return {"status": "failed", "deal_id": deal_id}
+                
+    except Exception as e:
+        logger.error(f"Error sending notification for deal {deal_id}: {e}")
+        raise self.retry(exc=e)
+
+
+# ============================================================================
+# BATCH PROCESSING TASKS
+# ============================================================================
+
+@app.task
+def batch_price_check(product_ids: List[int], priority: int = 5) -> Dict:
+    """
+    Check prices for a batch of products (dispatch individual tasks)
+    
+    Args:
+        product_ids: List of product IDs
+        priority: Task priority
+    """
+    logger.info(f"Dispatching price checks for {len(product_ids)} products (priority: {priority})")
+    
+    # Create individual tasks with priority
+    job = group(
+        check_product_price.s(product_id, priority=priority) 
+        for product_id in product_ids
+    )
+    
+    result = job.apply_async()
+    
+    return {
+        "status": "dispatched",
+        "product_count": len(product_ids),
+        "priority": priority,
+        "group_id": result.id
+    }
+
+
+# ============================================================================
+# SCHEDULING TASKS (Called by Celery Beat)
+# ============================================================================
+
+@app.task
+def continuous_queue_refill() -> Dict:
+    """
+    Continuously refill the price check queue with products
+    Ensures workers always have tasks to process
+    Called every 5 minutes
+    """
+    try:
+        with get_db() as db:
+            # Get products that need checking (not checked recently)
+            from datetime import timedelta
+            
+            # High priority: not checked in last 1 hour
+            high_priority_products = db.query(Product).filter(
+                Product.is_active == True,
+                Product.check_priority >= 70,
+                or_(
+                    Product.last_checked_at == None,
+                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=1)
+                )
+            ).limit(150).all()
+            
+            # Medium priority: not checked in last 4 hours
+            medium_priority_products = db.query(Product).filter(
+                Product.is_active == True,
+                Product.check_priority >= 40,
+                Product.check_priority < 70,
+                or_(
+                    Product.last_checked_at == None,
+                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=4)
+                )
+            ).limit(300).all()
+            
+            # Low priority: not checked in last 12 hours
+            low_priority_products = db.query(Product).filter(
+                Product.is_active == True,
+                Product.check_priority < 40,
+                or_(
+                    Product.last_checked_at == None,
+                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=12)
+                )
+            ).limit(400).all()
+            
+            total_queued = 0
+            
+            # Queue high priority (priority 9)
+            for product in high_priority_products:
+                check_product_price.apply_async(
+                    args=[product.id, product.check_priority],
+                    priority=9
+                )
+                total_queued += 1
+            
+            # Queue medium priority (priority 5)
+            for product in medium_priority_products:
+                check_product_price.apply_async(
+                    args=[product.id, product.check_priority],
+                    priority=5
+                )
+                total_queued += 1
+            
+            # Queue low priority (priority 2)
+            for product in low_priority_products:
+                check_product_price.apply_async(
+                    args=[product.id, product.check_priority],
+                    priority=2
+                )
+                total_queued += 1
+            
+            logger.info(f"Queue refilled: {len(high_priority_products)} high, {len(medium_priority_products)} medium, {len(low_priority_products)} low = {total_queued} total")
+            
+            return {
+                "status": "success",
+                "high_priority": len(high_priority_products),
+                "medium_priority": len(medium_priority_products),
+                "low_priority": len(low_priority_products),
+                "total_queued": total_queued
+            }
+            
+    except Exception as e:
+        logger.error(f"Error in continuous queue refill: {e}")
+        return {"status": "error", "error": str(e)}
+
+
+@app.task
+def schedule_high_priority_checks() -> Dict:
+    """
+    Schedule price checks for high-priority products
+    Called every hour by Celery Beat
+    """
+    logger.info("Scheduling high-priority product checks")
+    
+    from services.smart_batch_processor import SmartBatchProcessor
+    batch_processor = SmartBatchProcessor()
+    batches = batch_processor.get_high_priority_batches()
+    
+    tasks_dispatched = 0
+    for batch in batches:
+        batch_price_check.apply_async(
+            args=[batch['product_ids']],
+            kwargs={'priority': 10},
+            priority=10
+        )
+        tasks_dispatched += len(batch['product_ids'])
+    
+    logger.info(f"Dispatched {tasks_dispatched} high-priority checks")
+    return {"status": "success", "tasks_dispatched": tasks_dispatched}
+
+
+@app.task
+def schedule_medium_priority_checks() -> Dict:
+    """
+    Schedule price checks for medium-priority products
+    Called every 6 hours by Celery Beat
+    """
+    logger.info("Scheduling medium-priority product checks")
+    
+    from services.smart_batch_processor import SmartBatchProcessor
+    batch_processor = SmartBatchProcessor()
+    batches = batch_processor.get_medium_priority_batches()
+    
+    tasks_dispatched = 0
+    for batch in batches:
+        batch_price_check.apply_async(
+            args=[batch['product_ids']],
+            kwargs={'priority': 5},
+            priority=5
+        )
+        tasks_dispatched += len(batch['product_ids'])
+    
+    logger.info(f"Dispatched {tasks_dispatched} medium-priority checks")
+    return {"status": "success", "tasks_dispatched": tasks_dispatched}
+
+
+@app.task
+def schedule_low_priority_checks() -> Dict:
+    """
+    Schedule price checks for low-priority products
+    Called daily by Celery Beat
+    """
+    logger.info("Scheduling low-priority product checks")
+    
+    from services.smart_batch_processor import SmartBatchProcessor
+    batch_processor = SmartBatchProcessor()
+    batches = batch_processor.get_low_priority_batches()
+    
+    tasks_dispatched = 0
+    for batch in batches:
+        batch_price_check.apply_async(
+            args=[batch['product_ids']],
+            kwargs={'priority': 1},
+            priority=1
+        )
+        tasks_dispatched += len(batch['product_ids'])
+    
+    logger.info(f"Dispatched {tasks_dispatched} low-priority checks")
+    return {"status": "success", "tasks_dispatched": tasks_dispatched}
+
+
+@app.task
+def schedule_product_fetch() -> Dict:
+    """
+    Schedule product fetching from Amazon
+    Called daily by Celery Beat
+    """
+    logger.info("Scheduling product fetch")
+    
+    with get_db() as db:
+        categories = db.query(Category).filter(Category.is_active == True).all()
+        
+        tasks_dispatched = 0
+        for category in categories:
+            if not category.amazon_browse_node_ids:
+                continue
+            
+            for browse_node_id in category.amazon_browse_node_ids:
+                if not browse_node_id or not isinstance(browse_node_id, str):
+                    continue
+                
+                # Calculate pages based on max_products
+                # Each page = 10 products
+                # Amazon PA API limitation: max 10 pages per browse node
+                max_products = category.max_products or 100
+                max_pages = min((max_products // 10), 10)  # Max 10 pages per node (Amazon API limit)
+                
+                logger.info(f"Category '{category.name}': max_products={max_products}, fetching {max_pages} pages")
+                
+                for page in range(1, max_pages + 1):
+                    fetch_category_products.apply_async(
+                        args=[category.id, browse_node_id, page],
+                        priority=3
+                    )
+                    tasks_dispatched += 1
+        
+        logger.info(f"Dispatched {tasks_dispatched} product fetch tasks")
+        return {"status": "success", "tasks_dispatched": tasks_dispatched}
+
+
+@app.task
+def schedule_notifications() -> Dict:
+    """
+    Schedule Telegram notifications for new deals
+    Called every 30 minutes by Celery Beat
+    """
+    logger.info("Scheduling deal notifications")
+    
+    with get_db() as db:
+        # Get published deals not sent yet
+        deals = db.query(Deal).filter(
+            Deal.is_published == True,
+            Deal.is_active == True,
+            Deal.telegram_sent == False
+        ).order_by(Deal.discount_percentage.desc()).limit(50).all()
+        
+        tasks_dispatched = 0
+        for deal in deals:
+            send_deal_notification.apply_async(
+                args=[deal.id],
+                priority=8
+            )
+            tasks_dispatched += 1
+        
+        logger.info(f"Dispatched {tasks_dispatched} notification tasks")
+        return {"status": "success", "tasks_dispatched": tasks_dispatched}
+
+
+@app.task
+def update_product_priorities() -> Dict:
+    """
+    Update priority scores for all products
+    Called every 4 hours by Celery Beat
+    """
+    logger.info("Updating product priorities")
+    
+    from services.priority_calculator import PriorityCalculator
+    priority_calculator = PriorityCalculator()
+    
+    with get_db() as db:
+        # Update priorities in batches
+        offset = 0
+        batch_size = 1000
+        total_updated = 0
+        
+        while True:
+            products = db.query(Product).offset(offset).limit(batch_size).all()
+            if not products:
+                break
+            
+            for product in products:
+                priority = priority_calculator.calculate_priority(product, db)
+                product.check_priority = priority
+            
+            db.commit()
+            total_updated += len(products)
+            offset += batch_size
+            
+            logger.info(f"Updated priorities for {total_updated} products")
+        
+        logger.info(f"Completed priority update for {total_updated} products")
+        return {"status": "success", "products_updated": total_updated}
+
+
+@app.task
+def cleanup_old_data() -> Dict:
+    """
+    Cleanup old data (price history, logs, etc.)
+    Called daily by Celery Beat
+    """
+    logger.info("Cleaning up old data")
+    
+    with get_db() as db:
+        # Delete price history older than 90 days
+        cutoff_date = datetime.utcnow() - timedelta(days=90)
+        deleted_history = db.query(PriceHistory).filter(
+            PriceHistory.recorded_at < cutoff_date
+        ).delete()
+        
+        # Delete worker logs older than 30 days
+        log_cutoff = datetime.utcnow() - timedelta(days=30)
+        deleted_logs = db.query(WorkerLog).filter(
+            WorkerLog.created_at < log_cutoff
+        ).delete()
+        
+        # Expire old inactive deals
+        deal_cutoff = datetime.utcnow() - timedelta(days=7)
+        expired_deals = db.query(Deal).filter(
+            Deal.is_active == True,
+            Deal.updated_at < deal_cutoff
+        ).update({"is_active": False})
+        
+        db.commit()
+        
+        logger.info(f"Cleanup complete: {deleted_history} price records, {deleted_logs} logs, {expired_deals} deals expired")
+        return {
+            "status": "success",
+            "price_history_deleted": deleted_history,
+            "logs_deleted": deleted_logs,
+            "deals_expired": expired_deals
+        }

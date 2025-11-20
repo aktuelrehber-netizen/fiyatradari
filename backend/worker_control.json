@@ -1,0 +1,14 @@
+{
+  "scheduler_enabled": true,
+  "jobs": {
+    "fetch_products": {
+      "enabled": true
+    },
+    "check_prices": {
+      "enabled": true
+    },
+    "send_telegram": {
+      "enabled": true
+    }
+  }
+}
