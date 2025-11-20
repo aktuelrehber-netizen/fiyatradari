@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
@@ -79,7 +80,9 @@ export default async function RootLayout({
         <WebSiteStructuredData />
       </head>
       <body className={inter.className}>
-        <Analytics />
+        <Suspense fallback={null}>
+          <Analytics />
+        </Suspense>
         <Header categories={categories} />
         {children}
         <Footer />
