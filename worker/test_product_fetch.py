@@ -85,16 +85,27 @@ def test_browse_node_search(category):
         print(f"📡 Fetching from browse node: {browse_node}")
         print(f"   Page: 1")
         print(f"   Items per page: 10")
-        print(f"   Selection rules: {category.selection_rules or 'None'}")
-        print(f"   ⚠️  Testing WITHOUT selection rules for debugging...")
+        print(f"   Original selection rules: {category.selection_rules or 'None'}")
+        
+        # Test with relaxed rules (remove rating to see if API filtering works)
+        test_rules = None
+        if category.selection_rules:
+            test_rules = category.selection_rules.copy()
+            # Remove rating filter to test
+            if 'min_rating' in test_rules:
+                removed_rating = test_rules.pop('min_rating')
+                print(f"   ⚠️  Removed min_rating: {removed_rating} for testing")
+            if 'max_rating' in test_rules:
+                test_rules.pop('max_rating')
+        
+        print(f"   Test rules (API filtering): {test_rules or 'None'}")
         print()
         
-        # Test without selection rules first
         items = client.search_items_by_browse_node(
             browse_node_id=browse_node,
             page=1,
             items_per_page=10,
-            selection_rules=None  # Ignore selection rules for test
+            selection_rules=test_rules  # Use relaxed rules
         )
         
         if not items:
