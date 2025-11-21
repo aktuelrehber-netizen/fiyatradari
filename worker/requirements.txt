@@ -12,6 +12,10 @@ python-telegram-bot==20.7
 httpx==0.25.2
 requests==2.31.0
 
+# Web Scraping (Fallback for API limits)
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
 # Retry & Rate Limiting
 tenacity==8.2.3
 

@@ -18,6 +18,7 @@ except ImportError:
     logger.warning("amazon-paapi not installed. Using mock mode.")
 
 from config import config
+from services.amazon_crawler import AmazonCrawler
 
 
 class RateLimiter:
@@ -155,6 +156,10 @@ class AmazonPAAPIClient:
             logger.error(f"Failed to initialize Amazon PA API: {e}")
             self.api = None
             self.enabled = False
+        
+        # Initialize crawler as fallback
+        self.crawler = AmazonCrawler()
+        logger.info("✅ Amazon Crawler initialized as fallback")
     
     def is_enabled(self) -> bool:
         """Check if API is properly configured"""
@@ -256,7 +261,7 @@ class AmazonPAAPIClient:
         asins = asins[:10]
         
         try:
-            logger.info(f"Fetching {len(asins)} items by ASIN")
+            logger.info(f"Fetching {len(asins)} items by ASIN (PA-API)")
             
             # Call amazon-paapi get_items (resources are set in API initialization)
             items = self.api.get_items(items=asins)
@@ -268,8 +273,28 @@ class AmazonPAAPIClient:
             return [self._item_to_dict(item) for item in items]
             
         except Exception as e:
-            logger.error(f"Error fetching items {asins}: {e}")
-            raise
+            error_msg = str(e).lower()
+            
+            # Check if it's a rate limit error
+            if 'limit' in error_msg or 'throttl' in error_msg or 'requests limit reached' in error_msg:
+                logger.warning(f"⚠️ API rate limit reached for {asins}, falling back to crawler")
+                
+                try:
+                    # Fallback to crawler
+                    crawled_items = self.crawler.get_products(asins)
+                    if crawled_items:
+                        logger.info(f"✅ Successfully crawled {len(crawled_items)} items as fallback")
+                        return crawled_items
+                    else:
+                        logger.error(f"❌ Crawler also failed for {asins}")
+                        raise Exception(f"Both API and crawler failed for {asins}")
+                except Exception as crawl_error:
+                    logger.error(f"❌ Crawler error for {asins}: {crawl_error}")
+                    raise
+            else:
+                # Not a rate limit error, just log and raise
+                logger.error(f"Error fetching items {asins}: {e}")
+                raise
     
     def _item_to_dict(self, item) -> Dict:
         """Convert PA API item to dictionary"""
