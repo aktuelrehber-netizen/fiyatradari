@@ -328,68 +328,80 @@ def continuous_queue_refill() -> Dict:
     Continuously refill the queue with products to check
     Called every 3 minutes by Celery Beat
     
-    Uses dynamic priority mapping based on product score
+    Uses dynamic priority mapping with flexible intervals
     """
     try:
         with get_db() as db:
-            # Critical priority (90-100): Check every 30 minutes
+            # Critical priority (90-100): Check every 15 minutes
             critical_products = db.query(Product).filter(
                 Product.is_active == True,
                 Product.check_priority >= 90,
                 or_(
                     Product.last_checked_at == None,
-                    Product.last_checked_at < datetime.utcnow() - timedelta(minutes=30)
+                    Product.last_checked_at < datetime.utcnow() - timedelta(minutes=15)
                 )
-            ).limit(100).all()
+            ).limit(200).all()
             
-            # Very High priority (80-89): Check every hour
+            # Very High priority (80-89): Check every 30 minutes
             very_high_products = db.query(Product).filter(
                 Product.is_active == True,
                 Product.check_priority >= 80,
                 Product.check_priority < 90,
                 or_(
                     Product.last_checked_at == None,
-                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=1)
+                    Product.last_checked_at < datetime.utcnow() - timedelta(minutes=30)
                 )
-            ).limit(150).all()
+            ).limit(300).all()
             
-            # High priority (70-79): Check every 2 hours
+            # High priority (70-79): Check every hour
             high_priority_products = db.query(Product).filter(
                 Product.is_active == True,
                 Product.check_priority >= 70,
                 Product.check_priority < 80,
                 or_(
                     Product.last_checked_at == None,
-                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=2)
+                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=1)
                 )
-            ).limit(200).all()
+            ).limit(400).all()
             
-            # Medium priority (40-69): Check every 6 hours
-            medium_priority_products = db.query(Product).filter(
+            # Medium-High (50-69): Check every 2 hours
+            medium_high_products = db.query(Product).filter(
                 Product.is_active == True,
-                Product.check_priority >= 40,
+                Product.check_priority >= 50,
                 Product.check_priority < 70,
                 or_(
                     Product.last_checked_at == None,
-                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=6)
+                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=2)
                 )
-            ).limit(250).all()
+            ).limit(500).all()
             
-            # Low priority (<40): Check every 12 hours
-            low_priority_products = db.query(Product).filter(
+            # Medium (30-49): Check every 4 hours
+            medium_priority_products = db.query(Product).filter(
                 Product.is_active == True,
-                Product.check_priority < 40,
+                Product.check_priority >= 30,
+                Product.check_priority < 50,
                 or_(
                     Product.last_checked_at == None,
-                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=12)
+                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=4)
                 )
-            ).limit(300).all()
+            ).limit(600).all()
+            
+            # Low priority (<30): Check every 8 hours
+            low_priority_products = db.query(Product).filter(
+                Product.is_active == True,
+                Product.check_priority < 30,
+                or_(
+                    Product.last_checked_at == None,
+                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=8)
+                )
+            ).limit(800).all()
             
             total_queued = 0
             priority_distribution = {10: 0, 9: 0, 8: 0, 7: 0, 6: 0, 5: 0, 4: 0, 3: 0, 2: 0, 1: 0}
             
             # Queue all products with dynamic priority
-            all_products = critical_products + very_high_products + high_priority_products + medium_priority_products + low_priority_products
+            all_products = (critical_products + very_high_products + high_priority_products + 
+                          medium_high_products + medium_priority_products + low_priority_products)
             
             for product in all_products:
                 celery_priority = _calculate_celery_priority(product.check_priority)
@@ -407,9 +419,10 @@ def continuous_queue_refill() -> Dict:
                 "status": "success",
                 "critical": len(critical_products),
                 "very_high": len(very_high_products),
-                "high_priority": len(high_priority_products),
-                "medium_priority": len(medium_priority_products),
-                "low_priority": len(low_priority_products),
+                "high": len(high_priority_products),
+                "medium_high": len(medium_high_products),
+                "medium": len(medium_priority_products),
+                "low": len(low_priority_products),
                 "total_queued": total_queued,
                 "priority_distribution": priority_distribution
             }
