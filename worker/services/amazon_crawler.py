@@ -126,71 +126,31 @@ class AmazonCrawler:
         return None
     
     def _extract_price(self, soup: BeautifulSoup) -> Optional[float]:
-        """Extract current price - ONLY from buybox, not from entire page"""
+        """Extract current price from JSON data only"""
         
-        # Priority 1: Modern Amazon layout - CorePrice feature
-        # This is the PRIMARY price display in the buybox
-        # Use data-a-size="xl" to target the MAIN large price display
-        core_price_selectors = [
-            '#corePrice_feature_div .a-price[data-a-size="xl"][data-a-color="base"] span.a-offscreen',
-            '#corePrice_feature_div .a-price[data-a-color="base"] span.a-offscreen',
-            '#corePrice_feature_div .a-price:not(.a-text-price) span.a-offscreen',
-            '#corePrice_desktop .a-price:not(.a-text-price) span.a-offscreen',
-        ]
+        # Extract price from JSON data embedded in page
+        # Amazon stores structured price data in twister-plus-buying-options-price-data
+        try:
+            json_price_div = soup.select_one('.twister-plus-buying-options-price-data')
+            if json_price_div:
+                import json
+                price_data = json.loads(json_price_div.get_text().strip())
+                
+                # Extract from desktop_buybox_group_1
+                if 'desktop_buybox_group_1' in price_data and len(price_data['desktop_buybox_group_1']) > 0:
+                    price_amount = price_data['desktop_buybox_group_1'][0].get('priceAmount')
+                    if price_amount:
+                        logger.info(f"✅ Found price from JSON: {price_amount}")
+                        return float(price_amount)
+                
+                logger.warning(f"⚠️ JSON data found but no valid price in desktop_buybox_group_1")
+            else:
+                logger.warning("⚠️ No JSON price data found on page")
+                
+        except (json.JSONDecodeError, KeyError, ValueError, AttributeError) as e:
+            logger.error(f"❌ JSON price extraction failed: {e}")
         
-        for selector in core_price_selectors:
-            element = soup.select_one(selector)
-            if element:
-                price = self._parse_price(element.get_text().strip())
-                if price:
-                    logger.info(f"✅ Found price from {selector}: {price}")
-                    return price
-        
-        # Priority 2: Apex desktop price (buybox alternative layout)
-        apex_selectors = [
-            '#apex_desktop .a-price[data-a-color="base"] span.a-offscreen',
-            '#apex_desktop .a-price:not(.a-text-price) span.a-offscreen',
-        ]
-        
-        for selector in apex_selectors:
-            element = soup.select_one(selector)
-            if element:
-                price = self._parse_price(element.get_text().strip())
-                if price:
-                    logger.info(f"✅ Found price from {selector}: {price}")
-                    return price
-        
-        # Priority 3: Buybox-specific prices only (NOT entire page)
-        buybox_selectors = [
-            '#desktop_qualifiedBuyBox .a-price[data-a-color="base"] span.a-offscreen',
-            '#desktop_qualifiedBuyBox .a-price[data-a-color="price"] span.a-offscreen',
-            '#apex_offerDisplay_desktop .a-price:not(.a-text-price) span.a-offscreen',
-        ]
-        
-        for selector in buybox_selectors:
-            element = soup.select_one(selector)
-            if element:
-                price = self._parse_price(element.get_text().strip())
-                if price:
-                    logger.info(f"✅ Found price from {selector}: {price}")
-                    return price
-        
-        # Priority 4: Legacy selectors (for older pages)
-        legacy_selectors = [
-            '#priceblock_ourprice',
-            '#priceblock_dealprice',
-            '#price_inside_buybox',
-        ]
-        
-        for selector in legacy_selectors:
-            element = soup.select_one(selector)
-            if element:
-                price = self._parse_price(element.get_text().strip())
-                if price:
-                    logger.info(f"✅ Found price from legacy {selector}: {price}")
-                    return price
-        
-        logger.error("❌ No price found in buybox - product may be unavailable")
+        logger.error("❌ No price found - product may be unavailable or page structure changed")
         return None
     
     def _parse_price(self, text: str) -> Optional[float]:
