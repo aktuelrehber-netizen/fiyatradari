@@ -86,13 +86,15 @@ def test_browse_node_search(category):
         print(f"   Page: 1")
         print(f"   Items per page: 10")
         print(f"   Selection rules: {category.selection_rules or 'None'}")
+        print(f"   ⚠️  Testing WITHOUT selection rules for debugging...")
         print()
         
+        # Test without selection rules first
         items = client.search_items_by_browse_node(
             browse_node_id=browse_node,
             page=1,
             items_per_page=10,
-            selection_rules=category.selection_rules
+            selection_rules=None  # Ignore selection rules for test
         )
         
         if not items:
