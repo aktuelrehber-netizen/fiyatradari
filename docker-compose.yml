@@ -76,7 +76,7 @@ services:
     build:
       context: ./worker
       dockerfile: Dockerfile
-    command: celery -A celery_app worker --loglevel=info --concurrency=8 --max-tasks-per-child=100 --prefetch-multiplier=2 --queues=price_check,product_fetch,notifications,batch_processing
+    command: celery -A celery_app worker --loglevel=info --concurrency=8 --max-tasks-per-child=100 --prefetch-multiplier=1 --queues=price_check,product_fetch,notifications,batch_processing
     environment:
       - PYTHONPATH=/app
       - DATABASE_URL=${DATABASE_URL:-postgresql://fiyatradari:fiyatradari123@postgres:5432/fiyatradari}

@@ -111,13 +111,29 @@ def check_product_price(self, product_id: int, priority: int = 5) -> Dict:
             product.last_checked_at = datetime.utcnow()
             product.check_count = (product.check_count or 0) + 1
             
-            # Track price change
+            # Track price change and record history
             price_changed = False
+            should_record_history = False
+            
+            # Check if price changed
             if old_price and abs(new_price - old_price) > Decimal('0.01'):
                 price_changed = True
+                should_record_history = True
                 change_pct = float((new_price - old_price) / old_price * 100)
+                logger.info(f"Price changed for {product.asin}: {old_price} -> {new_price} ({change_pct:+.1f}%)")
+            else:
+                # Check if we should record daily snapshot (even if price didn't change)
+                last_history = db.query(PriceHistory).filter(
+                    PriceHistory.product_id == product.id
+                ).order_by(PriceHistory.recorded_at.desc()).first()
                 
-                # Record price history
+                if not last_history:
+                    should_record_history = True  # First record
+                elif last_history.recorded_at.date() < datetime.utcnow().date():
+                    should_record_history = True  # New day, record daily snapshot
+            
+            # Record price history
+            if should_record_history:
                 history = PriceHistory(
                     product_id=product.id,
                     price=new_price,
@@ -126,7 +142,8 @@ def check_product_price(self, product_id: int, priority: int = 5) -> Dict:
                 )
                 db.add(history)
                 
-                logger.info(f"Price changed for {product.asin}: {old_price} -> {new_price} ({change_pct:+.1f}%)")
+                if not price_changed:
+                    logger.debug(f"Daily price snapshot for {product.asin}: {new_price}")
             
             # Check for deals
             is_deal, deal_info = deal_detector.analyze_product(product, db)
