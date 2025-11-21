@@ -201,20 +201,13 @@ def fetch_category_products(self, category_id: int, browse_node_id: str, page: i
                 return {"status": "category_not_active", "category_id": category_id}
             
             # Fetch products from Amazon
-            # Relax selection rules for initial fetch (rating filter is too strict for new products)
-            relaxed_rules = None
-            if category.selection_rules:
-                relaxed_rules = category.selection_rules.copy()
-                # Remove rating requirement (new products don't have ratings yet)
-                relaxed_rules.pop('min_rating', None)
-                relaxed_rules.pop('max_rating', None)
-                logger.info(f"Relaxed selection rules: {relaxed_rules}")
-            
+            # Selection rules are now applied by Amazon API (server-side)
+            # Only client-side filters (keywords, review_count) are applied after
             items = amazon_client.search_items_by_browse_node(
                 browse_node_id=browse_node_id,
                 page=page,
                 items_per_page=10,
-                selection_rules=relaxed_rules
+                selection_rules=category.selection_rules
             )
             
             items_created = 0

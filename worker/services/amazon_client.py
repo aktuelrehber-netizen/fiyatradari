@@ -199,36 +199,58 @@ class AmazonPAAPIClient:
         self.rate_limiter.wait_if_needed()
         
         try:
-            sort_str = f", sort={sort_by}" if sort_by else ""
-            logger.info(f"Searching browse node {browse_node_id}, page {page}{sort_str}")
+            # Build API filter parameters from selection rules
+            api_filters = {}
             
-            # Search using Amazon PA API
+            if selection_rules:
+                # Price filters (convert to kuruş/cents)
+                if selection_rules.get('min_price'):
+                    api_filters['min_price'] = int(selection_rules['min_price'] * 100)
+                if selection_rules.get('max_price'):
+                    api_filters['max_price'] = int(selection_rules['max_price'] * 100)
+                
+                # Rating filter
+                if selection_rules.get('min_rating'):
+                    # Amazon accepts 1-5, we have float, convert to int
+                    api_filters['min_reviews_rating'] = int(selection_rules['min_rating'])
+                
+                # Prime filter
+                if selection_rules.get('only_prime'):
+                    api_filters['delivery_flags'] = ['Prime']
+            
+            sort_str = f", sort={sort_by}" if sort_by else ""
+            filters_str = f", filters={api_filters}" if api_filters else ""
+            logger.info(f"Searching browse node {browse_node_id}, page {page}{sort_str}{filters_str}")
+            
+            # Search using Amazon PA API with filters
             result = self.api.search_items(
                 browse_node_id=browse_node_id,
                 item_page=page,
                 item_count=min(items_per_page, 10),
-                sort_by=sort_by if sort_by else None
+                sort_by=sort_by if sort_by else None,
+                **api_filters  # Pass filters to API
             )
             
             if not result or not hasattr(result, 'items') or not result.items:
                 logger.info("No items found in response")
                 return []
             
-            logger.info(f"Found {len(result.items)} items")
+            logger.info(f"Found {len(result.items)} items (already filtered by Amazon API)")
             
-            # Convert to dict and filter by selection rules
+            # Convert to dict and apply additional client-side filters
+            # (for rules not supported by API like keywords, review_count)
             product_items = []
             for item in result.items:
                 product_dict = self._item_to_dict(item)
                 
-                # Apply selection rules
-                if selection_rules and not self._passes_selection_rules(product_dict, selection_rules):
-                    logger.debug(f"Item {product_dict.get('asin')} filtered out by selection rules")
+                # Apply remaining client-side filters
+                if selection_rules and not self._passes_client_side_filters(product_dict, selection_rules):
+                    logger.debug(f"Item {product_dict.get('asin')} filtered out by client-side rules")
                     continue
                 
                 product_items.append(product_dict)
             
-            logger.info(f"After filtering: {len(product_items)} items")
+            logger.info(f"After client-side filtering: {len(product_items)} items")
             return product_items
             
         except Exception as e:
@@ -406,8 +428,48 @@ class AmazonPAAPIClient:
             logger.error(f"Error converting item to dict: {e}")
             return {}
     
+    def _passes_client_side_filters(self, product: Dict, rules: Dict[str, Any]) -> bool:
+        """
+        Check if product passes client-side selection rules
+        (Filters not supported by Amazon PA-API)
+        
+        Client-side rules:
+            min_review_count: Minimum review count
+            include_keywords: Must contain these words
+            exclude_keywords: Must not contain these words
+        
+        Note: Price, rating, and prime filters are handled by Amazon API
+        """
+        try:
+            # Review count check (not supported by API)
+            if 'min_review_count' in rules and rules['min_review_count']:
+                if not product.get('review_count') or product['review_count'] < rules['min_review_count']:
+                    return False
+            
+            # Keyword checks (not supported by API)
+            title_lower = (product.get('title') or '').lower()
+            
+            if 'include_keywords' in rules and rules['include_keywords']:
+                # Must contain at least one keyword
+                if not any(keyword.lower() in title_lower for keyword in rules['include_keywords']):
+                    return False
+            
+            if 'exclude_keywords' in rules and rules['exclude_keywords']:
+                # Must not contain any keyword
+                if any(keyword.lower() in title_lower for keyword in rules['exclude_keywords']):
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error checking client-side filters: {e}")
+            return True  # On error, include the product
+    
     def _passes_selection_rules(self, product: Dict, rules: Dict[str, Any]) -> bool:
         """
+        DEPRECATED: Use _passes_client_side_filters instead
+        Legacy method for backward compatibility
+        
         Check if product passes selection rules
         
         Rules:
