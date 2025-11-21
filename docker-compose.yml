@@ -32,6 +32,8 @@ services:
       - SECRET_KEY=${SECRET_KEY:-your-super-secret-key-change-this}
       - ALGORITHM=${ALGORITHM:-HS256}
       - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
       - AMAZON_ACCESS_KEY=${AMAZON_ACCESS_KEY}
       - AMAZON_SECRET_KEY=${AMAZON_SECRET_KEY}
       - AMAZON_PARTNER_TAG=${AMAZON_PARTNER_TAG}
@@ -46,6 +48,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - fiyatradari_network
 

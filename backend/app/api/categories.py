@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
 import httpx
+from celery import Celery
+import os
 
 from app.db.database import get_db
 from app.db import models
@@ -10,6 +12,13 @@ from app.schemas import category as category_schema
 from app.core.security import get_current_active_admin
 
 router = APIRouter()
+
+# Celery client for task dispatch
+celery_app = Celery(
+    'tasks',
+    broker=os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0'),
+    backend=os.getenv('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+)
 
 
 @router.get("/", response_model=List[category_schema.CategoryWithStats])
@@ -305,30 +314,30 @@ async def trigger_product_fetch(
             detail="Category has no Amazon browse nodes configured"
         )
     
-    # Trigger Celery task asynchronously via docker exec
-    async def trigger_fetch():
-        try:
-            import subprocess
-            # Call Celery task via docker exec
-            command = [
-                "docker", "compose", "exec", "-T", "celery_worker",
-                "python3", "-c",
-                f"from celery_tasks import fetch_category_products; "
-                f"[fetch_category_products.apply_async(args=[{category_id}, node, page], priority=8) "
-                f"for node in {category.amazon_browse_node_ids} "
-                f"for page in range(1, {min((category.max_products or 100) // 10, 10) + 1})]"
-            ]
-            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception as e:
-            print(f"Error triggering fetch: {e}")
+    # Dispatch Celery tasks directly to message broker
+    tasks_dispatched = 0
+    try:
+        max_products = category.max_products or 100
+        max_pages = min((max_products // 10), 10)
+        
+        for browse_node in category.amazon_browse_node_ids:
+            for page in range(1, max_pages + 1):
+                celery_app.send_task(
+                    'celery_tasks.fetch_category_products',
+                    args=[category_id, browse_node, page],
+                    kwargs={},
+                    priority=8
+                )
+                tasks_dispatched += 1
+    except Exception as e:
+        print(f"Error dispatching tasks: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to dispatch tasks: {str(e)}"
+        )
     
-    # Schedule background task
-    background_tasks.add_task(trigger_fetch)
-    
-    # Calculate how many tasks will be dispatched
-    max_products = category.max_products or 100
-    max_pages = min((max_products // 10), 10)
-    total_tasks = len(category.amazon_browse_node_ids) * max_pages
+    # Use actual dispatched count
+    total_tasks = tasks_dispatched
     
     return {
         "status": "accepted",
