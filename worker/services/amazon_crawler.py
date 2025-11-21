@@ -138,10 +138,13 @@ class AmazonCrawler:
                 
                 # Extract from desktop_buybox_group_1
                 if 'desktop_buybox_group_1' in price_data and len(price_data['desktop_buybox_group_1']) > 0:
-                    price_amount = price_data['desktop_buybox_group_1'][0].get('priceAmount')
-                    if price_amount:
-                        logger.info(f"✅ Found price from JSON: {price_amount}")
-                        return float(price_amount)
+                    display_price = price_data['desktop_buybox_group_1'][0].get('displayPrice')
+                    if display_price:
+                        # Parse displayPrice (e.g., "149,90 TL" → 149.90)
+                        price = self._parse_price(display_price)
+                        if price:
+                            logger.info(f"✅ Found price from JSON displayPrice: {display_price} → {price}")
+                            return price
                 
                 logger.warning(f"⚠️ JSON data found but no valid price in desktop_buybox_group_1")
             else:
