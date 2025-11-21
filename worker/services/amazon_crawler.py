@@ -68,18 +68,25 @@ class AmazonCrawler:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
                 # Extract data
+                # If no price found, product is out of stock
+                current_price = self._extract_price(soup)
+                is_available = current_price is not None
+                
                 product_data = {
                     'asin': asin,
                     'title': self._extract_title(soup),
-                    'current_price': self._extract_price(soup),
+                    'current_price': current_price,
                     'currency': 'TRY',
-                    'is_available': self._check_availability(soup),
+                    'is_available': is_available,
                     'image_url': self._extract_image(soup),
                     'rating': self._extract_rating(soup),
                     'review_count': self._extract_review_count(soup),
                     'detail_page_url': url,
                     'source': 'crawler'  # Mark as crawled data
                 }
+                
+                if not is_available:
+                    logger.warning(f"⚠️ ASIN {asin}: No price found → Marked as OUT OF STOCK")
                 
                 logger.info(f"Crawled ASIN {asin}: {product_data.get('title', 'N/A')[:50]}, Price: {product_data.get('current_price')}")
                 return product_data
@@ -151,9 +158,9 @@ class AmazonCrawler:
                 logger.warning("⚠️ No JSON price data found on page")
                 
         except (json.JSONDecodeError, KeyError, ValueError, AttributeError) as e:
-            logger.error(f"❌ JSON price extraction failed: {e}")
+            logger.warning(f"⚠️ JSON price extraction failed: {e}")
         
-        logger.error("❌ No price found - product may be unavailable or page structure changed")
+        logger.warning("⚠️ No price found - product will be marked as out of stock")
         return None
     
     def _parse_price(self, text: str) -> Optional[float]:
