@@ -126,37 +126,52 @@ class AmazonCrawler:
         return None
     
     def _extract_price(self, soup: BeautifulSoup) -> Optional[float]:
-        """Extract current price - finds LOWEST price from all available options"""
-        # Collect all valid prices from different sources
-        all_prices = []
+        """Extract current price - ONLY from buybox, not from entire page"""
         
-        # Priority 1: Modern Amazon layout - CorePrice desktop
-        # This is the main price display in buybox (2024+ layout)
-        # Look for NON-strikethrough price (NOT .a-text-price)
-        core_price = soup.select_one('#corePrice_desktop .a-price:not(.a-text-price) span.a-offscreen')
-        if not core_price:
-            core_price = soup.select_one('#corePrice_feature_div .a-price:not(.a-text-price) span.a-offscreen')
-        if core_price:
-            price = self._parse_price(core_price.get_text().strip())
-            if price:
-                all_prices.append(price)
-                logger.debug(f"Found CorePrice: {price}")
+        # Priority 1: Modern Amazon layout - CorePrice feature
+        # This is the PRIMARY price display in the buybox
+        core_price_selectors = [
+            '#corePrice_feature_div .a-price[data-a-color="base"] span.a-offscreen',
+            '#corePrice_feature_div .a-price:not(.a-text-price) span.a-offscreen',
+            '#corePrice_desktop .a-price:not(.a-text-price) span.a-offscreen',
+        ]
         
-        # Priority 2: Apex desktop price (common in newer layouts)
-        apex_price = soup.select_one('#apex_desktop .a-price:not(.a-text-price) span.a-offscreen')
-        if apex_price:
-            price = self._parse_price(apex_price.get_text().strip())
-            if price:
-                all_prices.append(price)
-                logger.debug(f"Found ApexPrice: {price}")
+        for selector in core_price_selectors:
+            element = soup.select_one(selector)
+            if element:
+                price = self._parse_price(element.get_text().strip())
+                if price:
+                    logger.info(f"✅ Found price from {selector}: {price}")
+                    return price
         
-        # Priority 3: Buybox price (data-a-color="price" indicates actual price, not list)
-        buybox_price = soup.select_one('.a-price[data-a-color="price"] span.a-offscreen')
-        if buybox_price:
-            price = self._parse_price(buybox_price.get_text().strip())
-            if price:
-                all_prices.append(price)
-                logger.debug(f"Found BuyboxPrice: {price}")
+        # Priority 2: Apex desktop price (buybox alternative layout)
+        apex_selectors = [
+            '#apex_desktop .a-price[data-a-color="base"] span.a-offscreen',
+            '#apex_desktop .a-price:not(.a-text-price) span.a-offscreen',
+        ]
+        
+        for selector in apex_selectors:
+            element = soup.select_one(selector)
+            if element:
+                price = self._parse_price(element.get_text().strip())
+                if price:
+                    logger.info(f"✅ Found price from {selector}: {price}")
+                    return price
+        
+        # Priority 3: Buybox-specific prices only (NOT entire page)
+        buybox_selectors = [
+            '#desktop_qualifiedBuyBox .a-price[data-a-color="base"] span.a-offscreen',
+            '#desktop_qualifiedBuyBox .a-price[data-a-color="price"] span.a-offscreen',
+            '#apex_offerDisplay_desktop .a-price:not(.a-text-price) span.a-offscreen',
+        ]
+        
+        for selector in buybox_selectors:
+            element = soup.select_one(selector)
+            if element:
+                price = self._parse_price(element.get_text().strip())
+                if price:
+                    logger.info(f"✅ Found price from {selector}: {price}")
+                    return price
         
         # Priority 4: Legacy selectors (for older pages)
         legacy_selectors = [
@@ -164,34 +179,16 @@ class AmazonCrawler:
             '#priceblock_dealprice',
             '#price_inside_buybox',
         ]
+        
         for selector in legacy_selectors:
             element = soup.select_one(selector)
             if element:
                 price = self._parse_price(element.get_text().strip())
                 if price:
-                    all_prices.append(price)
-                    logger.debug(f"Found LegacyPrice ({selector}): {price}")
+                    logger.info(f"✅ Found price from legacy {selector}: {price}")
+                    return price
         
-        # Priority 5: General a-price elements (excluding list/strikethrough prices)
-        # Skip .a-text-price (strikethrough) and .a-text-strike
-        general_prices = soup.select('.a-price:not(.a-text-price):not(.a-text-strike) span.a-offscreen')
-        for element in general_prices:
-            price = self._parse_price(element.get_text().strip())
-            if price and price not in all_prices:  # Avoid duplicates
-                all_prices.append(price)
-        
-        # Return the LOWEST price found (like API does)
-        if all_prices:
-            # Remove duplicates and sort
-            unique_prices = sorted(list(set(all_prices)))
-            min_price = unique_prices[0]
-            
-            if len(unique_prices) > 1:
-                logger.warning(f"⚠️ Multiple prices found: {unique_prices}, selected lowest: {min_price}")
-            
-            return min_price
-        
-        logger.error("❌ No price found on page - selectors may need update")
+        logger.error("❌ No price found in buybox - product may be unavailable")
         return None
     
     def _parse_price(self, text: str) -> Optional[float]:
