@@ -130,7 +130,9 @@ class AmazonCrawler:
         
         # Priority 1: Modern Amazon layout - CorePrice feature
         # This is the PRIMARY price display in the buybox
+        # Use data-a-size="xl" to target the MAIN large price display
         core_price_selectors = [
+            '#corePrice_feature_div .a-price[data-a-size="xl"][data-a-color="base"] span.a-offscreen',
             '#corePrice_feature_div .a-price[data-a-color="base"] span.a-offscreen',
             '#corePrice_feature_div .a-price:not(.a-text-price) span.a-offscreen',
             '#corePrice_desktop .a-price:not(.a-text-price) span.a-offscreen',
