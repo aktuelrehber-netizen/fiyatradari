@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:18-alpine AS base
 
 WORKDIR /app
 
@@ -6,13 +6,16 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm install
+RUN npm ci
 
 # Copy application code
 COPY . .
 
+# Build Next.js app
+RUN npm run build
+
 # Expose port
 EXPOSE 3001
 
-# Development command (will be overridden by docker-compose)
-CMD ["npm", "run", "dev"]
+# Start production server
+CMD ["npm", "start"]

@@ -151,16 +151,12 @@ services:
       context: ./admin-panel
       dockerfile: Dockerfile
     container_name: fiyatradari_admin
-    command: npm run dev
     ports:
       - "3001:3001"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://api.firsatradari.com
       - PORT=3001
-    volumes:
-      - ./admin-panel:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       - backend
     networks:
@@ -172,16 +168,12 @@ services:
       context: ./web
       dockerfile: Dockerfile
     container_name: fiyatradari_web
-    command: npm run dev
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://api.firsatradari.com
       - PORT=3000
-    volumes:
-      - ./web:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       - backend
     networks:
