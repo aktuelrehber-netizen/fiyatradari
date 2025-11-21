@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
+import httpx
 
 from app.db.database import get_db
 from app.db import models
@@ -270,3 +271,72 @@ async def delete_category(
     db.commit()
     
     return None
+
+
+@router.post("/{category_id}/fetch-products", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_product_fetch(
+    category_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_active_admin)
+):
+    """
+    Manually trigger product fetching for a category (admin only)
+    This will dispatch Celery tasks to fetch products from Amazon
+    """
+    
+    # Validate category exists and is active
+    category = db.query(models.Category).filter(models.Category.id == category_id).first()
+    if not category:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Category not found"
+        )
+    
+    if not category.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category is not active"
+        )
+    
+    if not category.amazon_browse_node_ids or len(category.amazon_browse_node_ids) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Category has no Amazon browse nodes configured"
+        )
+    
+    # Trigger Celery task asynchronously via docker exec
+    async def trigger_fetch():
+        try:
+            import subprocess
+            # Call Celery task via docker exec
+            command = [
+                "docker", "compose", "exec", "-T", "celery_worker",
+                "python3", "-c",
+                f"from celery_tasks import fetch_category_products; "
+                f"[fetch_category_products.apply_async(args=[{category_id}, node, page], priority=8) "
+                f"for node in {category.amazon_browse_node_ids} "
+                f"for page in range(1, {min((category.max_products or 100) // 10, 10) + 1})]"
+            ]
+            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            print(f"Error triggering fetch: {e}")
+    
+    # Schedule background task
+    background_tasks.add_task(trigger_fetch)
+    
+    # Calculate how many tasks will be dispatched
+    max_products = category.max_products or 100
+    max_pages = min((max_products // 10), 10)
+    total_tasks = len(category.amazon_browse_node_ids) * max_pages
+    
+    return {
+        "status": "accepted",
+        "message": f"Product fetch triggered for category '{category.name}'",
+        "category_id": category_id,
+        "category_name": category.name,
+        "browse_nodes": len(category.amazon_browse_node_ids),
+        "pages_per_node": max_pages,
+        "total_tasks": total_tasks,
+        "estimated_products": total_tasks * 10
+    }

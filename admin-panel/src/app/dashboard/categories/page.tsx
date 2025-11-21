@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { categoriesAPI } from '@/utils/api-client'
-import { Plus, Edit, Trash2, RefreshCw, ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react'
+import { Plus, Edit, Trash2, RefreshCw, ChevronRight, ChevronDown, Folder, FolderOpen, Download } from 'lucide-react'
 import { CategoryModal } from '@/components/modals/category-modal'
 import { useToast } from '@/hooks/use-toast'
 
@@ -152,6 +152,32 @@ export default function CategoriesPage() {
     setSelectedCategory(null)
   }
 
+  const handleFetchProducts = async (category: Category) => {
+    if (!category.amazon_browse_node_ids || category.amazon_browse_node_ids.length === 0) {
+      toast({
+        title: 'Hata',
+        description: 'Bu kategoride Amazon Browse Node ID tanımlanmamış',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      const result = await categoriesAPI.fetchProducts(category.id)
+      toast({
+        title: 'Başarılı',
+        description: `${result.total_tasks} task oluşturuldu. Yaklaşık ${result.estimated_products} ürün çekilecek.`,
+        variant: 'success',
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Hata',
+        description: error.response?.data?.detail || 'Ürün çekme işlemi başlatılamadı',
+        variant: 'destructive',
+      })
+    }
+  }
+
   const renderTreeNode = (category: Category, level: number = 0): JSX.Element[] => {
     const isExpanded = expandedIds.has(category.id)
     const hasChildren = category.children && category.children.length > 0
@@ -212,6 +238,16 @@ export default function CategoriesPage() {
         </TableCell>
         <TableCell className="text-right">
           <div className="flex items-center justify-end gap-2">
+            {category.amazon_browse_node_ids && category.amazon_browse_node_ids.length > 0 && (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => handleFetchProducts(category)}
+                title="Amazon'dan ürün çek"
+              >
+                <Download className="h-4 w-4 text-blue-500" />
+              </Button>
+            )}
             <Button 
               variant="ghost" 
               size="sm"

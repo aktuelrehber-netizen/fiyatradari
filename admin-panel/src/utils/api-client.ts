@@ -85,6 +85,11 @@ export const categoriesAPI = {
     const response = await apiClient.delete(`/categories/${id}`)
     return response.data
   },
+  
+  fetchProducts: async (id: number) => {
+    const response = await apiClient.post(`/categories/${id}/fetch-products`)
+    return response.data
+  },
 }
 
 // Products API
