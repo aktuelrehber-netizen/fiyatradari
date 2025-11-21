@@ -17,6 +17,48 @@ from config import config
 
 
 # ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def _calculate_celery_priority(product_priority: int) -> int:
+    """
+    Map product priority score (0-100) to Celery priority (1-10)
+    
+    More granular mapping for better queue management:
+    - 90-100: Priority 10 (Critical - new deals, hot items)
+    - 80-89:  Priority 9  (Very High)
+    - 70-79:  Priority 8  (High)
+    - 60-69:  Priority 7  (Above Medium)
+    - 50-59:  Priority 6  (Medium-High)
+    - 40-49:  Priority 5  (Medium)
+    - 30-39:  Priority 4  (Below Medium)
+    - 20-29:  Priority 3  (Low-Medium)
+    - 10-19:  Priority 2  (Low)
+    - 0-9:    Priority 1  (Very Low)
+    """
+    if product_priority >= 90:
+        return 10
+    elif product_priority >= 80:
+        return 9
+    elif product_priority >= 70:
+        return 8
+    elif product_priority >= 60:
+        return 7
+    elif product_priority >= 50:
+        return 6
+    elif product_priority >= 40:
+        return 5
+    elif product_priority >= 30:
+        return 4
+    elif product_priority >= 20:
+        return 3
+    elif product_priority >= 10:
+        return 2
+    else:
+        return 1
+
+
+# ============================================================================
 # INDIVIDUAL PRODUCT TASKS
 # ============================================================================
 
@@ -283,37 +325,57 @@ def batch_price_check(product_ids: List[int], priority: int = 5) -> Dict:
 @app.task
 def continuous_queue_refill() -> Dict:
     """
-    Continuously refill the price check queue with products
-    Ensures workers always have tasks to process
-    Called every 5 minutes
+    Continuously refill the queue with products to check
+    Called every 3 minutes by Celery Beat
+    
+    Uses dynamic priority mapping based on product score
     """
     try:
         with get_db() as db:
-            # Get products that need checking (not checked recently)
-            from datetime import timedelta
-            
-            # High priority: not checked in last 1 hour
-            high_priority_products = db.query(Product).filter(
+            # Critical priority (90-100): Check every 30 minutes
+            critical_products = db.query(Product).filter(
                 Product.is_active == True,
-                Product.check_priority >= 70,
+                Product.check_priority >= 90,
+                or_(
+                    Product.last_checked_at == None,
+                    Product.last_checked_at < datetime.utcnow() - timedelta(minutes=30)
+                )
+            ).limit(100).all()
+            
+            # Very High priority (80-89): Check every hour
+            very_high_products = db.query(Product).filter(
+                Product.is_active == True,
+                Product.check_priority >= 80,
+                Product.check_priority < 90,
                 or_(
                     Product.last_checked_at == None,
                     Product.last_checked_at < datetime.utcnow() - timedelta(hours=1)
                 )
             ).limit(150).all()
             
-            # Medium priority: not checked in last 4 hours
+            # High priority (70-79): Check every 2 hours
+            high_priority_products = db.query(Product).filter(
+                Product.is_active == True,
+                Product.check_priority >= 70,
+                Product.check_priority < 80,
+                or_(
+                    Product.last_checked_at == None,
+                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=2)
+                )
+            ).limit(200).all()
+            
+            # Medium priority (40-69): Check every 6 hours
             medium_priority_products = db.query(Product).filter(
                 Product.is_active == True,
                 Product.check_priority >= 40,
                 Product.check_priority < 70,
                 or_(
                     Product.last_checked_at == None,
-                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=4)
+                    Product.last_checked_at < datetime.utcnow() - timedelta(hours=6)
                 )
-            ).limit(300).all()
+            ).limit(250).all()
             
-            # Low priority: not checked in last 12 hours
+            # Low priority (<40): Check every 12 hours
             low_priority_products = db.query(Product).filter(
                 Product.is_active == True,
                 Product.check_priority < 40,
@@ -321,42 +383,35 @@ def continuous_queue_refill() -> Dict:
                     Product.last_checked_at == None,
                     Product.last_checked_at < datetime.utcnow() - timedelta(hours=12)
                 )
-            ).limit(400).all()
+            ).limit(300).all()
             
             total_queued = 0
+            priority_distribution = {10: 0, 9: 0, 8: 0, 7: 0, 6: 0, 5: 0, 4: 0, 3: 0, 2: 0, 1: 0}
             
-            # Queue high priority (priority 9)
-            for product in high_priority_products:
+            # Queue all products with dynamic priority
+            all_products = critical_products + very_high_products + high_priority_products + medium_priority_products + low_priority_products
+            
+            for product in all_products:
+                celery_priority = _calculate_celery_priority(product.check_priority)
                 check_product_price.apply_async(
                     args=[product.id, product.check_priority],
-                    priority=9
+                    priority=celery_priority
                 )
+                priority_distribution[celery_priority] += 1
                 total_queued += 1
             
-            # Queue medium priority (priority 5)
-            for product in medium_priority_products:
-                check_product_price.apply_async(
-                    args=[product.id, product.check_priority],
-                    priority=5
-                )
-                total_queued += 1
-            
-            # Queue low priority (priority 2)
-            for product in low_priority_products:
-                check_product_price.apply_async(
-                    args=[product.id, product.check_priority],
-                    priority=2
-                )
-                total_queued += 1
-            
-            logger.info(f"Queue refilled: {len(high_priority_products)} high, {len(medium_priority_products)} medium, {len(low_priority_products)} low = {total_queued} total")
+            logger.info(f"Queue refilled: {total_queued} total products")
+            logger.info(f"Priority distribution: {priority_distribution}")
             
             return {
                 "status": "success",
+                "critical": len(critical_products),
+                "very_high": len(very_high_products),
                 "high_priority": len(high_priority_products),
                 "medium_priority": len(medium_priority_products),
                 "low_priority": len(low_priority_products),
-                "total_queued": total_queued
+                "total_queued": total_queued,
+                "priority_distribution": priority_distribution
             }
             
     except Exception as e:
