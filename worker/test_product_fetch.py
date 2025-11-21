@@ -2,6 +2,9 @@
 Test script for product fetching system
 Run: python3 test_product_fetch.py
 """
+from datetime import datetime
+from decimal import Decimal
+
 from database import get_db, Category, Product
 from services.amazon_client import AmazonPAAPIClient
 from celery_tasks import fetch_category_products
@@ -160,9 +163,6 @@ def test_product_insertion(category, items):
                     updated += 1
                     print(f"📝 Updated: {asin} - {product.title[:40]}")
                 else:
-                    from datetime import datetime
-                    from decimal import Decimal
-                    
                     product = Product(
                         asin=asin,
                         title=item.get('title', '')[:500],
