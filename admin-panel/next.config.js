@@ -55,7 +55,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: process.env.NEXT_PUBLIC_API_URL + '/api/v1/:path*',
+        destination: (process.env.NEXT_PUBLIC_API_URL || 'https://api.firsatradari.com') + '/api/v1/:path*',
       },
     ]
   },
