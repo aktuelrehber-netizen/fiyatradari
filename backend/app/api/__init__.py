@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api import auth, users, categories, products, deals, settings, health, workers, amazon, celery_monitor
+from app.api import auth, users, categories, products, deals, settings, health, workers, amazon, celery_monitor, cache
 
 api_router = APIRouter()
 
@@ -14,3 +14,4 @@ api_router.include_router(settings.router, prefix="/settings", tags=["settings"]
 api_router.include_router(workers.router, prefix="/workers", tags=["workers"])
 api_router.include_router(amazon.router, prefix="/amazon", tags=["amazon"])
 api_router.include_router(celery_monitor.router, prefix="/celery", tags=["celery-monitoring"])
+api_router.include_router(cache.router, prefix="/cache", tags=["cache"])

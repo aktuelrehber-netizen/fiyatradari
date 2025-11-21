@@ -3,6 +3,9 @@ import Image from 'next/image'
 import { api } from '@/utils/api'
 import { TrendingDown, ExternalLink, Send, Zap, Bell, Tag, Sparkles, Clock, Shield, TrendingUp } from 'lucide-react'
 
+// ISR: Revalidate every 60 seconds
+export const revalidate = 60
+
 export default async function Home() {
   let deals = []
   let categories = []

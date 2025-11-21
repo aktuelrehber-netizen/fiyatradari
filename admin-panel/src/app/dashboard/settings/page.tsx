@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { settingsAPI } from '@/utils/api-client'
 import { Save, Eye, EyeOff } from 'lucide-react'
 import { TelegramTemplateEditor } from '@/components/telegram-template-editor'
+import { CacheManager } from '@/components/CacheManager'
 
 interface Setting {
   key: string
@@ -184,6 +185,8 @@ export default function SettingsPage() {
           ))}
         </CardContent>
       </Card>
+
+      <CacheManager />
     </div>
   )
 }

@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 
+// ISR: Revalidate every 120 seconds (categories change less frequently)
+export const revalidate = 120
+
 interface PageProps {
   params: Promise<{
     slug: string

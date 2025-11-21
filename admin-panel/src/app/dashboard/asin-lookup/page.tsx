@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Search, Package, Barcode, Star, ShoppingCart, ExternalLink, CheckCircle, XCircle } from 'lucide-react'
 import Image from 'next/image'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
 interface ProductData {
   asin: string
   title: string
@@ -93,7 +95,7 @@ export default function ASINLookupPage() {
 
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch('http://localhost:8000/api/v1/amazon/lookup-asin', {
+      const response = await fetch(`${API_URL}/api/v1/amazon/lookup-asin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -150,7 +152,7 @@ export default function ASINLookupPage() {
 
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch('http://localhost:8000/api/v1/amazon/bulk-lookup-asin', {
+      const response = await fetch(`${API_URL}/api/v1/amazon/bulk-lookup-asin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -197,7 +199,7 @@ export default function ASINLookupPage() {
 
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch('http://localhost:8000/api/v1/amazon/search-products', {
+      const response = await fetch(`${API_URL}/api/v1/amazon/search-products`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
