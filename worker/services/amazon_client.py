@@ -274,7 +274,7 @@ class AmazonPAAPIClient:
     def _item_to_dict(self, item) -> Dict:
         """Convert PA API item to dictionary"""
         try:
-            # Extract price data (ONLY current price, ignore Amazon's inflated list price)
+            # Extract price data (find LOWEST price from all listings)
             price = None
             is_prime = False
             availability = None
@@ -282,16 +282,27 @@ class AmazonPAAPIClient:
             if hasattr(item, 'offers') and item.offers:
                 listings = item.offers.listings
                 if listings and len(listings) > 0:
-                    listing = listings[0]
+                    # Find the lowest price among all available listings
+                    valid_prices = []
+                    for listing in listings:
+                        if hasattr(listing, 'price') and listing.price and listing.price.amount:
+                            listing_price = float(listing.price.amount)
+                            valid_prices.append({
+                                'price': listing_price,
+                                'listing': listing
+                            })
                     
-                    if hasattr(listing, 'price') and listing.price:
-                        price = float(listing.price.amount) if listing.price.amount else None
-                    
-                    if hasattr(listing, 'availability'):
-                        availability = listing.availability.message if listing.availability else None
-                    
-                    if hasattr(listing, 'delivery_info') and listing.delivery_info:
-                        is_prime = listing.delivery_info.is_prime_eligible or False
+                    if valid_prices:
+                        # Sort by price and get the cheapest
+                        cheapest = min(valid_prices, key=lambda x: x['price'])
+                        price = cheapest['price']
+                        listing = cheapest['listing']
+                        
+                        if hasattr(listing, 'availability'):
+                            availability = listing.availability.message if listing.availability else None
+                        
+                        if hasattr(listing, 'delivery_info') and listing.delivery_info:
+                            is_prime = listing.delivery_info.is_prime_eligible or False
             
             # Extract rating data
             rating = None
