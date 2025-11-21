@@ -88,7 +88,9 @@ class AmazonCrawler:
                 if not is_available:
                     logger.warning(f"⚠️ ASIN {asin}: No price found → Marked as OUT OF STOCK")
                 
-                logger.info(f"Crawled ASIN {asin}: {product_data.get('title', 'N/A')[:50]}, Price: {product_data.get('current_price')}")
+                title = product_data.get('title') or 'N/A'
+                title_preview = title[:50] if title else 'N/A'
+                logger.info(f"Crawled ASIN {asin}: {title_preview}, Price: {product_data.get('current_price')}")
                 return product_data
                 
         except httpx.HTTPStatusError as e:
@@ -133,34 +135,26 @@ class AmazonCrawler:
         return None
     
     def _extract_price(self, soup: BeautifulSoup) -> Optional[float]:
-        """Extract current price from JSON data only"""
+        """Extract current price from JSON displayPrice only"""
         
-        # Extract price from JSON data embedded in page
-        # Amazon stores structured price data in twister-plus-buying-options-price-data
+        # Extract price from JSON data only
         try:
             json_price_div = soup.select_one('.twister-plus-buying-options-price-data')
             if json_price_div:
                 import json
                 price_data = json.loads(json_price_div.get_text().strip())
                 
-                # Extract from desktop_buybox_group_1
                 if 'desktop_buybox_group_1' in price_data and len(price_data['desktop_buybox_group_1']) > 0:
                     display_price = price_data['desktop_buybox_group_1'][0].get('displayPrice')
                     if display_price:
-                        # Parse displayPrice (e.g., "149,90 TL" → 149.90)
                         price = self._parse_price(display_price)
                         if price:
-                            logger.info(f"✅ Found price from JSON displayPrice: {display_price} → {price}")
+                            logger.info(f"✅ Found price from JSON: {display_price} → {price}")
                             return price
-                
-                logger.warning(f"⚠️ JSON data found but no valid price in desktop_buybox_group_1")
-            else:
-                logger.warning("⚠️ No JSON price data found on page")
-                
         except (json.JSONDecodeError, KeyError, ValueError, AttributeError) as e:
-            logger.warning(f"⚠️ JSON price extraction failed: {e}")
+            logger.debug(f"JSON extraction failed: {e}")
         
-        logger.warning("⚠️ No price found - product will be marked as out of stock")
+        logger.warning("⚠️ No displayPrice found - product will be marked as out of stock")
         return None
     
     def _parse_price(self, text: str) -> Optional[float]:
