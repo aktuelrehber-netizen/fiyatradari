@@ -282,6 +282,8 @@ class AmazonPAAPIClient:
             if hasattr(item, 'offers') and item.offers:
                 listings = item.offers.listings
                 if listings and len(listings) > 0:
+                    logger.debug(f"ASIN {item.asin}: Found {len(listings)} listings")
+                    
                     # Find the lowest price among all available listings
                     valid_prices = []
                     for listing in listings:
@@ -294,9 +296,14 @@ class AmazonPAAPIClient:
                     
                     if valid_prices:
                         # Sort by price and get the cheapest
+                        all_prices = [p['price'] for p in valid_prices]
+                        logger.debug(f"ASIN {item.asin}: Prices found: {all_prices}")
+                        
                         cheapest = min(valid_prices, key=lambda x: x['price'])
                         price = cheapest['price']
                         listing = cheapest['listing']
+                        
+                        logger.info(f"ASIN {item.asin}: Selected lowest price: {price} TRY (from {len(valid_prices)} listings)")
                         
                         if hasattr(listing, 'availability'):
                             availability = listing.availability.message if listing.availability else None
