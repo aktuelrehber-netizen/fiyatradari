@@ -62,6 +62,7 @@ class DashboardStats(BaseModel):
     total_categories: int
     active_deals: int
     total_price_checks_today: int
+    price_changes_today: int
     telegram_messages_sent: int
     last_worker_run: Optional[datetime] = None
     system_health: str = "healthy"

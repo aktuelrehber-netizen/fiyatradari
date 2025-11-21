@@ -53,9 +53,14 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         models.Deal.telegram_sent == True
     ).count()
     
-    # Count price checks today
+    # Count price checks today (products checked today)
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    total_price_checks_today = db.query(models.PriceHistory).filter(
+    total_price_checks_today = db.query(models.Product).filter(
+        models.Product.last_checked_at >= today
+    ).count()
+    
+    # Count price changes today (only when price actually changed)
+    price_changes_today = db.query(models.PriceHistory).filter(
         models.PriceHistory.recorded_at >= today
     ).count()
     
@@ -78,6 +83,7 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         total_categories=total_categories,
         active_deals=active_deals,
         total_price_checks_today=total_price_checks_today,
+        price_changes_today=price_changes_today,
         telegram_messages_sent=telegram_messages_sent,
         last_worker_run=last_worker_run,
         system_health=system_health

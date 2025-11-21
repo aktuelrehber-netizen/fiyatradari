@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { healthAPI } from '@/utils/api-client'
-import { Package, Zap, FolderTree, Send, TrendingUp, Activity, TrendingDown } from 'lucide-react'
+import { Package, Zap, FolderTree, Send, TrendingUp, Activity, TrendingDown, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 interface DashboardStats {
@@ -12,6 +12,7 @@ interface DashboardStats {
   total_categories: number
   active_deals: number
   total_price_checks_today: number
+  price_changes_today: number
   telegram_messages_sent: number
   last_worker_run: string | null
   system_health: string
@@ -127,9 +128,16 @@ export default function DashboardPage() {
     {
       title: 'Bugünkü Fiyat Kontrolleri',
       value: stats?.total_price_checks_today || 0,
-      icon: Activity,
+      icon: RefreshCw,
       color: 'text-indigo-600',
       bgColor: 'bg-indigo-100',
+    },
+    {
+      title: 'Bugün Fiyatı Değişenler',
+      value: stats?.price_changes_today || 0,
+      icon: TrendingDown,
+      color: 'text-pink-600',
+      bgColor: 'bg-pink-100',
     },
     {
       title: 'Telegram Mesajları',
