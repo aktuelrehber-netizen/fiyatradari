@@ -130,47 +130,68 @@ class AmazonCrawler:
         # Collect all valid prices from different sources
         all_prices = []
         
-        # Priority 1: Deal/Sale prices (in buybox)
-        deal_selectors = [
-            '#priceblock_dealprice',  # Deal price
-            '#priceblock_ourprice',   # Our price
-            '#price_inside_buybox',   # Buybox price
-        ]
+        # Priority 1: Modern Amazon layout - CorePrice desktop
+        # This is the main price display in buybox (2024+ layout)
+        # Look for NON-strikethrough price (NOT .a-text-price)
+        core_price = soup.select_one('#corePrice_desktop .a-price:not(.a-text-price) span.a-offscreen')
+        if not core_price:
+            core_price = soup.select_one('#corePrice_feature_div .a-price:not(.a-text-price) span.a-offscreen')
+        if core_price:
+            price = self._parse_price(core_price.get_text().strip())
+            if price:
+                all_prices.append(price)
+                logger.debug(f"Found CorePrice: {price}")
         
-        for selector in deal_selectors:
+        # Priority 2: Apex desktop price (common in newer layouts)
+        apex_price = soup.select_one('#apex_desktop .a-price:not(.a-text-price) span.a-offscreen')
+        if apex_price:
+            price = self._parse_price(apex_price.get_text().strip())
+            if price:
+                all_prices.append(price)
+                logger.debug(f"Found ApexPrice: {price}")
+        
+        # Priority 3: Buybox price (data-a-color="price" indicates actual price, not list)
+        buybox_price = soup.select_one('.a-price[data-a-color="price"] span.a-offscreen')
+        if buybox_price:
+            price = self._parse_price(buybox_price.get_text().strip())
+            if price:
+                all_prices.append(price)
+                logger.debug(f"Found BuyboxPrice: {price}")
+        
+        # Priority 4: Legacy selectors (for older pages)
+        legacy_selectors = [
+            '#priceblock_ourprice',
+            '#priceblock_dealprice',
+            '#price_inside_buybox',
+        ]
+        for selector in legacy_selectors:
             element = soup.select_one(selector)
             if element:
                 price = self._parse_price(element.get_text().strip())
                 if price:
                     all_prices.append(price)
+                    logger.debug(f"Found LegacyPrice ({selector}): {price}")
         
-        # Priority 2: a-price elements (current price, not list price)
-        # Look for prices that are NOT strikethrough (list price)
-        price_elements = soup.select('.a-price:not(.a-text-price) span.a-offscreen')
-        for element in price_elements:
+        # Priority 5: General a-price elements (excluding list/strikethrough prices)
+        # Skip .a-text-price (strikethrough) and .a-text-strike
+        general_prices = soup.select('.a-price:not(.a-text-price):not(.a-text-strike) span.a-offscreen')
+        for element in general_prices:
             price = self._parse_price(element.get_text().strip())
-            if price:
+            if price and price not in all_prices:  # Avoid duplicates
                 all_prices.append(price)
-        
-        # Priority 3: Other price formats
-        other_selectors = [
-            'span.a-price-whole',
-        ]
-        
-        for selector in other_selectors:
-            elements = soup.select(selector)
-            for element in elements:
-                price = self._parse_price(element.get_text().strip())
-                if price:
-                    all_prices.append(price)
         
         # Return the LOWEST price found (like API does)
         if all_prices:
-            min_price = min(all_prices)
-            if len(all_prices) > 1:
-                logger.info(f"Found {len(all_prices)} prices: {all_prices}, selected lowest: {min_price}")
+            # Remove duplicates and sort
+            unique_prices = sorted(list(set(all_prices)))
+            min_price = unique_prices[0]
+            
+            if len(unique_prices) > 1:
+                logger.warning(f"⚠️ Multiple prices found: {unique_prices}, selected lowest: {min_price}")
+            
             return min_price
         
+        logger.error("❌ No price found on page - selectors may need update")
         return None
     
     def _parse_price(self, text: str) -> Optional[float]:
