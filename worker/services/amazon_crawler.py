@@ -126,25 +126,50 @@ class AmazonCrawler:
         return None
     
     def _extract_price(self, soup: BeautifulSoup) -> Optional[float]:
-        """Extract current price"""
-        # Try multiple price selectors
-        selectors = [
-            '.a-price.a-text-price span.a-offscreen',  # Discounted price
-            '#priceblock_ourprice',
-            '#priceblock_dealprice',
-            '.a-price span.a-offscreen',
-            '#price_inside_buybox',
+        """Extract current price - finds LOWEST price from all available options"""
+        # Collect all valid prices from different sources
+        all_prices = []
+        
+        # Priority 1: Deal/Sale prices (in buybox)
+        deal_selectors = [
+            '#priceblock_dealprice',  # Deal price
+            '#priceblock_ourprice',   # Our price
+            '#price_inside_buybox',   # Buybox price
+        ]
+        
+        for selector in deal_selectors:
+            element = soup.select_one(selector)
+            if element:
+                price = self._parse_price(element.get_text().strip())
+                if price:
+                    all_prices.append(price)
+        
+        # Priority 2: a-price elements (current price, not list price)
+        # Look for prices that are NOT strikethrough (list price)
+        price_elements = soup.select('.a-price:not(.a-text-price) span.a-offscreen')
+        for element in price_elements:
+            price = self._parse_price(element.get_text().strip())
+            if price:
+                all_prices.append(price)
+        
+        # Priority 3: Other price formats
+        other_selectors = [
             'span.a-price-whole',
         ]
         
-        for selector in selectors:
+        for selector in other_selectors:
             elements = soup.select(selector)
             for element in elements:
-                text = element.get_text().strip()
-                # Parse Turkish price format: "1.234,56 TL"
-                price = self._parse_price(text)
+                price = self._parse_price(element.get_text().strip())
                 if price:
-                    return price
+                    all_prices.append(price)
+        
+        # Return the LOWEST price found (like API does)
+        if all_prices:
+            min_price = min(all_prices)
+            if len(all_prices) > 1:
+                logger.info(f"Found {len(all_prices)} prices: {all_prices}, selected lowest: {min_price}")
+            return min_price
         
         return None
     
