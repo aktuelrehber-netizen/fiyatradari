@@ -225,6 +225,8 @@ def fetch_category_products(self, category_id: int, browse_node_id: str, page: i
                     # Update existing
                     product.current_price = Decimal(str(item_data['current_price'])) if item_data.get('current_price') else None
                     product.is_available = item_data.get('is_available', True)
+                    product.rating = item_data.get('rating')
+                    product.review_count = item_data.get('review_count')
                     product.last_checked_at = datetime.utcnow()
                     items_updated += 1
                 else:
