@@ -10,11 +10,9 @@ import {
   Zap, 
   Settings, 
   Users,
-  Activity,
   LogOut,
-  Cpu,
   Search,
-  BarChart3
+  Server
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
@@ -50,19 +48,9 @@ const menuItems = [
     icon: Users,
   },
   {
-    title: 'Flower Monitor',
-    href: '/dashboard/workers',
-    icon: Cpu,
-  },
-  {
-    title: 'Monitoring',
-    href: '/dashboard/monitoring',
-    icon: BarChart3,
-  },
-  {
-    title: 'Sistem Sağlığı',
-    href: '/dashboard/health',
-    icon: Activity,
+    title: 'Sistem Yönetimi',
+    href: '/dashboard/system',
+    icon: Server,
   },
   {
     title: 'Ayarlar',
