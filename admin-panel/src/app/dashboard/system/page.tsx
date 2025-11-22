@@ -9,10 +9,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
-import { systemAPI } from '@/utils/api-client'
+import { systemAPI, settingsAPI } from '@/utils/api-client'
+import { CacheManager } from '@/components/CacheManager'
 import { 
   Activity, Server, Zap, Database, Clock, Play, Pause, 
-  RefreshCw, Loader2, X, TrendingUp, AlertCircle, CheckCircle2
+  RefreshCw, Loader2, X, TrendingUp, AlertCircle, CheckCircle2, Settings, Save
 } from 'lucide-react'
 
 interface SystemHealth {
@@ -38,6 +39,14 @@ interface ActiveTask {
   duration_seconds: number
 }
 
+interface Setting {
+  key: string
+  value: string
+  data_type: string
+  description: string
+  group: string
+}
+
 export default function SystemManagementPage() {
   const { toast } = useToast()
   
@@ -48,6 +57,8 @@ export default function SystemManagementPage() {
   const [schedules, setSchedules] = useState<Record<string, Schedule>>({})
   const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([])
   const [poolSize, setPoolSize] = useState(4)
+  const [workerSettings, setWorkerSettings] = useState<Setting[]>([])
+  const [savingSettings, setSavingSettings] = useState(false)
   const [isRunning, setIsRunning] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
 
@@ -105,6 +116,39 @@ export default function SystemManagementPage() {
     }
   }
 
+  // Load worker settings
+  const loadWorkerSettings = async () => {
+    try {
+      const data = await settingsAPI.list()
+      const workerGroup = data.filter((s: Setting) => s.group === 'worker')
+      setWorkerSettings(workerGroup)
+    } catch (error) {
+      console.error('Failed to load worker settings:', error)
+    }
+  }
+
+  // Save worker setting
+  const handleSaveWorkerSetting = async (key: string, value: string) => {
+    setSavingSettings(true)
+    try {
+      await settingsAPI.update(key, { value })
+      toast({
+        title: '✅ Ayar Kaydedildi',
+        description: 'Worker ayarı başarıyla güncellendi',
+        duration: 3000
+      })
+      loadWorkerSettings()
+    } catch (error: any) {
+      toast({
+        title: '❌ Hata',
+        description: error.response?.data?.detail || 'Ayar kaydedilemedi',
+        variant: 'destructive'
+      })
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
   // Initial load
   useEffect(() => {
     loadDashboard()
@@ -112,6 +156,7 @@ export default function SystemManagementPage() {
     loadActiveTasks()
     loadPoolStatus()
     loadControlStatus()
+    loadWorkerSettings()
 
     // Auto-refresh every 5 seconds
     const interval = setInterval(() => {
@@ -559,6 +604,54 @@ export default function SystemManagementPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Worker Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Worker Ayarları
+          </CardTitle>
+          <CardDescription>
+            Arka plan görevleri ve otomasyon ayarları
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {workerSettings.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Worker ayarları bulunamadı
+            </div>
+          ) : (
+            workerSettings.map((setting) => (
+              <div key={setting.key} className="space-y-2">
+                <Label>{setting.description || setting.key}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type={setting.data_type === 'int' ? 'number' : 'text'}
+                    defaultValue={setting.value}
+                    id={`worker-${setting.key}`}
+                    placeholder={setting.description}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={() => {
+                      const input = document.getElementById(`worker-${setting.key}`) as HTMLInputElement
+                      handleSaveWorkerSetting(setting.key, input.value)
+                    }}
+                    disabled={savingSettings}
+                    size="icon"
+                  >
+                    {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Cache Management */}
+      <CacheManager />
     </div>
   )
 }
