@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label'
 import { settingsAPI } from '@/utils/api-client'
 import { Save, Eye, EyeOff } from 'lucide-react'
 import { TelegramTemplateEditor } from '@/components/telegram-template-editor'
-import { CacheManager } from '@/components/CacheManager'
 
 interface Setting {
   key: string
@@ -153,40 +152,15 @@ export default function SettingsPage() {
         loadSettings()
       }} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Worker Ayarları</CardTitle>
-          <CardDescription>
-            Arka plan görevleri ve otomasyon ayarları
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {groupSettings('worker').map((setting) => (
-            <div key={setting.key} className="space-y-2">
-              <Label>{setting.description || setting.key}</Label>
-              <div className="flex gap-2">
-                <Input
-                  type={setting.data_type === 'int' ? 'number' : 'text'}
-                  defaultValue={setting.value}
-                  id={setting.key}
-                  placeholder={setting.description}
-                />
-                <Button
-                  onClick={() => {
-                    const input = document.getElementById(setting.key) as HTMLInputElement
-                    handleSave(setting.key, input.value)
-                  }}
-                  disabled={saving}
-                >
-                  <Save className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <CacheManager />
+      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <p className="text-sm text-blue-900">
+          <strong>💡 Not:</strong> Worker ayarları ve Cache yönetimi artık{' '}
+          <a href="/dashboard/system" className="underline font-semibold">
+            Sistem Yönetimi
+          </a>{' '}
+          sayfasında bulunmaktadır.
+        </p>
+      </div>
     </div>
   )
 }
