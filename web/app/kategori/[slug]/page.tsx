@@ -1,9 +1,9 @@
 import { api } from '@/utils/api'
-import { ExternalLink, TrendingDown } from 'lucide-react'
-import Image from 'next/image'
+import { ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
+import InfiniteProductGrid from '@/components/InfiniteProductGrid'
 
 // ISR: Revalidate every 120 seconds (categories change less frequently)
 export const revalidate = 120
@@ -68,7 +68,8 @@ export default async function CategoryPage({ params }: PageProps) {
   
   // Fetch category, products, and all categories for tree
   let category: Category | null = null
-  let deals: any[] = []
+  let initialProducts: any[] = []
+  let totalProducts: number = 0
   let allCategories: Category[] = []
   let subcategories: Category[] = []
   
@@ -86,9 +87,10 @@ export default async function CategoryPage({ params }: PageProps) {
       const catId = category.id
       subcategories = allCategories.filter((cat: Category) => cat.parent_id === catId)
       
-      // Always get products for the category (and its subcategories)
-      const response = await api.getProductsByCategory(category.id, { limit: 10000 })
-      deals = response.items || response || []
+      // Get initial 50 products for infinite scroll
+      const response = await api.getProductsByCategory(category.id, { limit: 50 })
+      initialProducts = response.items || response || []
+      totalProducts = response.total || initialProducts.length
     }
   } catch (error) {
     // Silent fail - show 404 page
@@ -113,7 +115,7 @@ export default async function CategoryPage({ params }: PageProps) {
                 </p>
               )}
             </div>
-            {(subcategories.length > 0 || deals.length > 0) && (
+            {(subcategories.length > 0 || totalProducts > 0) && (
               <div className="flex-shrink-0 text-right">
                 <div className="inline-flex flex-col items-end bg-gradient-to-br from-[#FF9900]/10 to-[#242F3E]/10 px-4 py-3 rounded-xl border border-[#FF9900]/30">
                   {subcategories.length > 0 ? (
@@ -123,7 +125,7 @@ export default async function CategoryPage({ params }: PageProps) {
                     </>
                   ) : (
                     <>
-                      <span className="text-xl md:text-2xl font-bold text-[#FF9900]">{deals.length}</span>
+                      <span className="text-xl md:text-2xl font-bold text-[#FF9900]">{totalProducts}</span>
                       <span className="text-xs text-gray-600 mt-0.5">Aktif Fırsat</span>
                     </>
                   )}
@@ -159,124 +161,13 @@ export default async function CategoryPage({ params }: PageProps) {
         </section>
       )}
 
-      {/* Products Grid - Always show products */}
+      {/* Products Grid - Always show products with infinite scroll */}
       <section className="container mx-auto px-4 py-8">
-        {deals.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <div className="text-4xl mb-3">📦</div>
-            <h2 className="text-md font-bold text-gray-800 mb-2">
-              Henüz Fırsat Yok
-            </h2>
-            <p className="text-xs text-gray-600 mb-4">
-              Bu kategoride şu anda aktif fırsat bulunmuyor. Telegram kanalımıza katılarak yeni fırsatlardan haberdar olun!
-            </p>
-            <a
-              href="https://t.me/firsatradaricom"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 bg-[#FF9900] hover:bg-[#FF9900]/90 text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all hover:scale-105"
-            >
-              Telegram'a Katıl
-            </a>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-800">
-                Aktif Fırsatlar
-              </h2>
-              <p className="text-sm text-gray-600">
-                {deals.length} ürün bulundu
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {deals.map((product: any) => {
-                const discountPercentage = product.list_price && product.current_price
-                  ? ((parseFloat(product.list_price) - parseFloat(product.current_price)) / parseFloat(product.list_price) * 100)
-                  : 0
-
-                return (
-                  <div
-                    key={product.id}
-                    className="bg-white rounded-xl border border-gray-200 hover:shadow-xl hover:border-[#FF9900]/30 transition-all duration-300 overflow-hidden group"
-                  >
-                    {/* Image */}
-                    <div className="relative aspect-square bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-                      {product.image_url && (
-                        <Image
-                          src={product.image_url}
-                          alt={product.title}
-                          fill
-                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                          className="object-contain p-4 group-hover:scale-110 transition-transform duration-500"
-                        />
-                      )}
-                      {discountPercentage > 0 && (
-                        <div className="absolute top-2 right-2 bg-[#FF9900] text-white px-2 py-1 rounded-lg font-bold text-xs flex items-center gap-1 shadow-lg">
-                          <TrendingDown className="h-3 w-3" />
-                          %{discountPercentage.toFixed(0)}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Details */}
-                    <div className="p-3">
-                      {/* Brand */}
-                      {product.brand && (
-                        <div className="text-xs text-gray-500 mb-1 uppercase tracking-wide">
-                          {product.brand}
-                        </div>
-                      )}
-
-                      {/* Title */}
-                      <h3 className="font-semibold text-sm text-gray-800 mb-2 line-clamp-2 leading-tight">
-                        {product.title}
-                      </h3>
-
-                      {/* Rating */}
-                      {product.rating && (
-                        <div className="flex items-center gap-1.5 mb-2 text-xs">
-                          <div className="flex items-center">
-                            <span className="text-yellow-500">★</span>
-                            <span className="ml-0.5 font-medium">{product.rating}</span>
-                          </div>
-                          <span className="text-gray-500">
-                            ({product.review_count})
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Prices */}
-                      <div className="mb-3">
-                        <div className="text-xl font-bold text-green-600">
-                          {parseFloat(product.current_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
-                        </div>
-                        {product.list_price && parseFloat(product.list_price) > parseFloat(product.current_price) && (
-                          <div className="text-xs text-gray-400 line-through">
-                            {parseFloat(product.list_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Amazon Link */}
-                      {product.detail_page_url && (
-                        <a
-                          href={product.detail_page_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block w-full bg-[#FF9900] hover:bg-[#FF9900]/90 text-white text-center py-2 rounded-lg text-sm font-semibold transition-all hover:shadow-lg active:scale-95"
-                        >
-                          Satın Al
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </>
-        )}
+        <InfiniteProductGrid
+          initialProducts={initialProducts}
+          categoryId={category.id}
+          totalProducts={totalProducts}
+        />
       </section>
     </main>
   )
