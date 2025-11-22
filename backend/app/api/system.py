@@ -1,253 +1,84 @@
 """
-Professional System Monitoring & Control API
-Unified endpoint for all system management needs
+🚀 PROFESSIONAL SYSTEM MANAGEMENT API
+Custom-built for FiyatRadarı - No external tools needed
+
+Features:
+- Worker pool scaling (dynamic concurrency)
+- Schedule management (cron editor)
+- Task monitoring & control
+- Real-time system health
+- Performance metrics
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, desc, func
 from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
-import redis
+from typing import Dict, List, Optional
 from pydantic import BaseModel
+import redis
+import json
+from pathlib import Path
 
 from app.db.database import get_db
 from app.db import models
+from app.api.auth import get_current_user
 
 router = APIRouter()
 
-# Redis connection
+# Redis for real-time data
 redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
-# Response Models
-class WorkerInfo(BaseModel):
-    name: str
-    status: str
-    active_tasks: int
-    pool_size: Optional[int] = None
+# Control files
+WORKER_CONTROL_FILE = Path("/app/worker_control.json")
+SCHEDULE_FILE = Path("/app/worker_schedule.json")
 
-class SystemHealth(BaseModel):
-    status: str  # healthy, degraded, unhealthy
-    score: int  # 0-100
-    database: str
-    redis: str
-    workers_online: int
-    workers_total: int
+# ============================================================================
+# MODELS
+# ============================================================================
 
-class SystemStats(BaseModel):
-    total_products: int
-    active_products: int
-    active_deals: int
-    price_checks_today: int
-    tasks_active: int
-    workers_online: int
-    last_worker_run: Optional[datetime]
+class WorkerPoolStatus(BaseModel):
+    current_size: int
+    max_size: int
+    min_size: int
+    active_workers: int
+    idle_workers: int
 
-class SystemOverview(BaseModel):
-    health: SystemHealth
-    stats: SystemStats
-    workers: List[WorkerInfo]
-    recent_activity: List[Dict[str, Any]]
+class JobSchedule(BaseModel):
+    job_type: str
+    enabled: bool
+    cron: str  # Cron expression
+    last_run: Optional[datetime]
+    next_run: Optional[str]
+    
+class ActiveTask(BaseModel):
+    task_id: str
+    task_name: str
+    worker: str
+    started: str
+    duration_seconds: int
 
+class SystemHealthStatus(BaseModel):
+    status: str  # healthy, degraded, critical
+    score: int
+    database: bool
+    redis: bool
+    workers: int
+    queue_size: int
 
-def get_celery_inspect_fast():
-    """Get Celery inspect with aggressive timeout for speed"""
-    from celery import Celery
-    
-    celery_app = Celery('fiyatradari')
-    celery_app.config_from_object({
-        'broker_url': 'redis://redis:6379/0',
-        'result_backend': 'redis://redis:6379/1',
-        'broker_connection_timeout': 1.0,  # 1 second
-        'broker_connection_max_retries': 0,
-    })
-    
-    return celery_app.control.inspect(timeout=0.5)  # 500ms timeout
+class SystemDashboard(BaseModel):
+    health: SystemHealthStatus
+    workers: WorkerPoolStatus
+    schedules: List[JobSchedule]
+    active_tasks: List[ActiveTask]
+    stats: Dict[str, int]
 
+# ============================================================================
+# WORKER POOL MANAGEMENT
+# ============================================================================
 
-@router.get("/overview", response_model=SystemOverview)
-async def get_system_overview(db: Session = Depends(get_db)):
-    """
-    Get complete system overview - OPTIMIZED FOR SPEED
-    Single endpoint that returns everything needed for dashboard
-    """
-    
-    # === 1. DATABASE HEALTH ===
-    db_status = "healthy"
-    try:
-        db.execute(text("SELECT 1"))
-    except Exception as e:
-        db_status = "unhealthy"
-    
-    # === 2. REDIS HEALTH ===
-    redis_status = "healthy"
-    try:
-        redis_client.ping()
-    except:
-        redis_status = "unhealthy"
-    
-    # === 3. WORKERS (FAST - cached or quick check) ===
-    workers = []
-    workers_online = 0
-    tasks_active = 0
-    
-    try:
-        inspect = get_celery_inspect_fast()
-        stats = inspect.stats() or {}
-        active = inspect.active() or {}
-        
-        workers_online = len(stats)
-        
-        for worker_name in stats.keys():
-            worker_active_tasks = active.get(worker_name, [])
-            tasks_active += len(worker_active_tasks)
-            
-            workers.append(WorkerInfo(
-                name=worker_name.split('@')[1] if '@' in worker_name else worker_name,
-                status='online',
-                active_tasks=len(worker_active_tasks)
-            ))
-    except:
-        # If Celery inspect fails, don't block - just show degraded status
-        pass
-    
-    # === 4. DATABASE STATS (optimized queries) ===
-    total_products = db.query(models.Product).count()
-    active_products = db.query(models.Product).filter(models.Product.is_active == True).count()
-    active_deals = db.query(models.Deal).filter(models.Deal.is_active == True).count()
-    
-    # Today's price checks
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    price_checks_today = db.query(models.Product).filter(
-        models.Product.last_checked_at >= today
-    ).count()
-    
-    # Last worker run
-    last_worker_log = db.query(models.WorkerLog).order_by(
-        models.WorkerLog.created_at.desc()
-    ).first()
-    last_worker_run = last_worker_log.created_at if last_worker_log else None
-    
-    # === 5. RECENT ACTIVITY (last 5 important events) ===
-    recent_activity = []
-    
-    # Recent deals
-    recent_deals = db.query(models.Deal).filter(
-        models.Deal.is_active == True
-    ).order_by(models.Deal.created_at.desc()).limit(3).all()
-    
-    for deal in recent_deals:
-        recent_activity.append({
-            'type': 'deal',
-            'title': deal.title[:50],
-            'discount': float(deal.discount_percentage),
-            'time': deal.created_at.isoformat() if deal.created_at else datetime.utcnow().isoformat()
-        })
-    
-    # Recent price changes
-    recent_changes = db.query(models.PriceHistory).order_by(
-        models.PriceHistory.recorded_at.desc()
-    ).limit(2).all()
-    
-    for change in recent_changes:
-        product = db.query(models.Product).filter(models.Product.id == change.product_id).first()
-        if product:
-            recent_activity.append({
-                'type': 'price_change',
-                'title': product.title[:50] if product.title else 'Unknown',
-                'old_price': float(change.old_price) if change.old_price else 0,
-                'new_price': float(change.new_price) if change.new_price else 0,
-                'time': change.recorded_at.isoformat() if change.recorded_at else datetime.utcnow().isoformat()
-            })
-    
-    # Sort by time
-    recent_activity.sort(key=lambda x: x['time'], reverse=True)
-    recent_activity = recent_activity[:5]
-    
-    # === 6. CALCULATE HEALTH SCORE ===
-    health_score = 100
-    
-    if db_status != "healthy":
-        health_score -= 50
-    if redis_status != "healthy":
-        health_score -= 20
-    if workers_online < 5:  # Assuming you want at least 5 workers
-        health_score -= 15
-    if last_worker_run:
-        hours_since = (datetime.utcnow() - last_worker_run).total_seconds() / 3600
-        if hours_since > 24:
-            health_score -= 15
-    
-    health_status = 'healthy' if health_score >= 80 else 'degraded' if health_score >= 50 else 'unhealthy'
-    
-    # === BUILD RESPONSE ===
-    return SystemOverview(
-        health=SystemHealth(
-            status=health_status,
-            score=health_score,
-            database=db_status,
-            redis=redis_status,
-            workers_online=workers_online,
-            workers_total=workers_online  # For now, online = total
-        ),
-        stats=SystemStats(
-            total_products=total_products,
-            active_products=active_products,
-            active_deals=active_deals,
-            price_checks_today=price_checks_today,
-            tasks_active=tasks_active,
-            workers_online=workers_online,
-            last_worker_run=last_worker_run
-        ),
-        workers=workers,
-        recent_activity=recent_activity
-    )
-
-
-@router.get("/workers")
-async def get_workers_detailed():
-    """Get detailed worker information"""
-    try:
-        inspect = get_celery_inspect_fast()
-        
-        active = inspect.active() or {}
-        stats = inspect.stats() or {}
-        registered = inspect.registered() or {}
-        
-        workers = []
-        for worker_name in stats.keys():
-            worker_stats = stats.get(worker_name, {})
-            worker_active_tasks = active.get(worker_name, [])
-            worker_registered = registered.get(worker_name, [])
-            
-            workers.append({
-                'name': worker_name,
-                'short_name': worker_name.split('@')[1] if '@' in worker_name else worker_name,
-                'status': 'online',
-                'active_tasks': len(worker_active_tasks),
-                'current_tasks': [
-                    {
-                        'id': task.get('id'),
-                        'name': task.get('name', '').split('.')[-1],  # Get task name without module
-                        'args': str(task.get('args', []))[:100]  # Limit length
-                    }
-                    for task in worker_active_tasks[:5]  # Limit to 5 tasks
-                ],
-                'registered_tasks_count': len(worker_registered),
-                'pool_info': worker_stats.get('pool', {})
-            })
-        
-        return {
-            'workers': workers,
-            'total': len(workers),
-            'timestamp': datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-
-
-@router.post("/workers/{worker_name}/restart")
-async def restart_worker(worker_name: str):
-    """Restart worker pool"""
+@router.get("/workers/pool")
+async def get_worker_pool_status():
+    """Get current worker pool configuration"""
     try:
         from celery import Celery
         
@@ -257,41 +88,379 @@ async def restart_worker(worker_name: str):
             'result_backend': 'redis://redis:6379/1',
         })
         
-        celery_app.control.pool_restart(destination=[worker_name])
+        inspect = celery_app.control.inspect(timeout=1.0)
+        stats = inspect.stats() or {}
+        active = inspect.active() or {}
+        
+        # Count workers
+        total_workers = len(stats)
+        active_tasks = sum(len(tasks) for tasks in active.values())
+        
+        # Get pool sizes from worker stats
+        pool_sizes = []
+        for worker_stats in stats.values():
+            pool = worker_stats.get('pool', {})
+            max_concurrency = pool.get('max-concurrency', 4)
+            pool_sizes.append(max_concurrency)
+        
+        current_pool_size = pool_sizes[0] if pool_sizes else 4
         
         return {
-            'status': 'success',
-            'message': f'Restart signal sent to {worker_name}',
-            'timestamp': datetime.utcnow().isoformat()
+            'current_size': current_pool_size,
+            'max_size': 20,
+            'min_size': 1,
+            'active_workers': total_workers,
+            'idle_workers': max(0, total_workers - active_tasks),
+            'tasks_running': active_tasks
+        }
+    except Exception as e:
+        return {
+            'current_size': 4,
+            'max_size': 20,
+            'min_size': 1,
+            'active_workers': 0,
+            'idle_workers': 0,
+            'tasks_running': 0,
+            'error': str(e)
+        }
+
+
+@router.post("/workers/pool/scale")
+async def scale_worker_pool(
+    size: int,
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Scale worker pool size (set concurrency level)
+    Size: 1-20 concurrent tasks
+    """
+    if size < 1 or size > 20:
+        raise HTTPException(status_code=400, detail="Size must be between 1 and 20")
+    
+    try:
+        from celery import Celery
+        
+        celery_app = Celery('fiyatradari')
+        celery_app.config_from_object({
+            'broker_url': 'redis://redis:6379/0',
+            'result_backend': 'redis://redis:6379/1',
+        })
+        
+        # Send pool resize command to all workers
+        celery_app.control.pool_grow(n=size)
+        
+        # Save configuration
+        config = {'pool_size': size, 'updated_at': datetime.utcnow().isoformat()}
+        redis_client.set('worker:pool:config', json.dumps(config))
+        
+        return {
+            'success': True,
+            'message': f'Worker pool scaled to {size}',
+            'new_size': size
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/tasks/recent")
-async def get_recent_tasks(limit: int = 20):
-    """Get recent task executions from worker logs"""
+# ============================================================================
+# SCHEDULE MANAGEMENT
+# ============================================================================
+
+@router.get("/schedules")
+async def get_schedules():
+    """Get all job schedules"""
     try:
-        from app.db import models
-        from app.db.database import get_db
+        if SCHEDULE_FILE.exists():
+            with open(SCHEDULE_FILE, 'r') as f:
+                schedules = json.load(f)
+        else:
+            # Default schedules
+            schedules = {
+                'fetch_products': {
+                    'enabled': True,
+                    'cron': '0 */6 * * *',  # Every 6 hours
+                    'description': 'Ürün Çekme'
+                },
+                'check_prices': {
+                    'enabled': True,
+                    'cron': '0 */4 * * *',  # Every 4 hours
+                    'description': 'Fiyat Kontrol'
+                },
+                'update_missing_ratings': {
+                    'enabled': True,
+                    'cron': '0 */8 * * *',  # Every 8 hours
+                    'description': 'Rating Güncelleme'
+                },
+                'send_telegram': {
+                    'enabled': True,
+                    'cron': '*/30 * * * *',  # Every 30 minutes
+                    'description': 'Telegram Bildirimleri'
+                }
+            }
         
-        db = next(get_db())
+        return {'schedules': schedules}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/schedules/{job_type}")
+async def update_schedule(
+    job_type: str,
+    enabled: bool,
+    cron: str,
+    current_user: models.User = Depends(get_current_user)
+):
+    """Update job schedule"""
+    try:
+        # Load current schedules
+        if SCHEDULE_FILE.exists():
+            with open(SCHEDULE_FILE, 'r') as f:
+                schedules = json.load(f)
+        else:
+            schedules = {}
         
-        logs = db.query(models.WorkerLog).order_by(
-            models.WorkerLog.created_at.desc()
-        ).limit(limit).all()
+        # Update schedule
+        if job_type not in schedules:
+            schedules[job_type] = {}
+        
+        schedules[job_type]['enabled'] = enabled
+        schedules[job_type]['cron'] = cron
+        schedules[job_type]['updated_at'] = datetime.utcnow().isoformat()
+        schedules[job_type]['updated_by'] = current_user.username
+        
+        # Save
+        with open(SCHEDULE_FILE, 'w') as f:
+            json.dump(schedules, f, indent=2)
         
         return {
-            'tasks': [
-                {
-                    'task_type': log.task_type,
-                    'status': log.status,
-                    'message': log.message[:100] if log.message else None,
-                    'created_at': log.created_at.isoformat() if log.created_at else None
-                }
-                for log in logs
-            ],
-            'total': len(logs)
+            'success': True,
+            'message': f'Schedule updated for {job_type}',
+            'schedule': schedules[job_type]
         }
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# TASK MANAGEMENT
+# ============================================================================
+
+@router.get("/tasks/active")
+async def get_active_tasks():
+    """Get currently running tasks"""
+    try:
+        from celery import Celery
+        
+        celery_app = Celery('fiyatradari')
+        celery_app.config_from_object({
+            'broker_url': 'redis://redis:6379/0',
+            'result_backend': 'redis://redis:6379/1',
+        })
+        
+        inspect = celery_app.control.inspect(timeout=1.0)
+        active = inspect.active() or {}
+        
+        tasks = []
+        for worker_name, worker_tasks in active.items():
+            for task in worker_tasks:
+                started = task.get('time_start', 0)
+                duration = int(datetime.utcnow().timestamp() - started) if started else 0
+                
+                tasks.append({
+                    'task_id': task.get('id', 'unknown'),
+                    'task_name': task.get('name', '').split('.')[-1],
+                    'worker': worker_name.split('@')[1] if '@' in worker_name else worker_name,
+                    'started': datetime.fromtimestamp(started).isoformat() if started else 'unknown',
+                    'duration_seconds': duration
+                })
+        
+        return {'tasks': tasks, 'total': len(tasks)}
+    except Exception as e:
         return {'tasks': [], 'total': 0, 'error': str(e)}
+
+
+@router.post("/tasks/{task_id}/cancel")
+async def cancel_task(
+    task_id: str,
+    current_user: models.User = Depends(get_current_user)
+):
+    """Cancel a running task"""
+    try:
+        from celery import Celery
+        
+        celery_app = Celery('fiyatradari')
+        celery_app.config_from_object({
+            'broker_url': 'redis://redis:6379/0',
+            'result_backend': 'redis://redis:6379/1',
+        })
+        
+        celery_app.control.revoke(task_id, terminate=True, signal='SIGKILL')
+        
+        return {
+            'success': True,
+            'message': f'Task {task_id} cancelled'
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# DASHBOARD - MAIN ENDPOINT
+# ============================================================================
+
+@router.get("/dashboard")
+async def get_system_dashboard(db: Session = Depends(get_db)):
+    """
+    🎯 MAIN DASHBOARD ENDPOINT
+    Get everything needed for the system management dashboard
+    """
+    
+    # === HEALTH CHECK ===
+    db_healthy = True
+    try:
+        db.execute(text("SELECT 1"))
+    except:
+        db_healthy = False
+    
+    redis_healthy = True
+    try:
+        redis_client.ping()
+    except:
+        redis_healthy = False
+    
+    # === WORKER STATUS ===
+    worker_count = 0
+    queue_size = 0
+    try:
+        from celery import Celery
+        celery_app = Celery('fiyatradari')
+        celery_app.config_from_object({
+            'broker_url': 'redis://redis:6379/0',
+            'result_backend': 'redis://redis:6379/1',
+        })
+        inspect = celery_app.control.inspect(timeout=0.5)
+        stats = inspect.stats() or {}
+        worker_count = len(stats)
+        
+        # Queue size
+        try:
+            queue_size = redis_client.llen('celery') or 0
+        except:
+            pass
+    except:
+        pass
+    
+    # === HEALTH SCORE ===
+    health_score = 100
+    if not db_healthy:
+        health_score -= 50
+    if not redis_healthy:
+        health_score -= 30
+    if worker_count == 0:
+        health_score -= 20
+    
+    health_status = 'healthy' if health_score >= 80 else 'degraded' if health_score >= 50 else 'critical'
+    
+    # === DATABASE STATS ===
+    total_products = db.query(models.Product).count()
+    active_deals = db.query(models.Deal).filter(models.Deal.is_active == True).count()
+    
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    tasks_today = db.query(models.WorkerLog).filter(
+        models.WorkerLog.created_at >= today
+    ).count()
+    
+    # === RECENT ACTIVITY ===
+    recent_logs = db.query(models.WorkerLog).order_by(
+        desc(models.WorkerLog.created_at)
+    ).limit(5).all()
+    
+    recent_activity = [
+        {
+            'type': log.job_type,
+            'status': log.status,
+            'time': log.created_at.isoformat() if log.created_at else None,
+            'items': log.items_processed or 0
+        }
+        for log in recent_logs
+    ]
+    
+    return {
+        'health': {
+            'status': health_status,
+            'score': health_score,
+            'database': db_healthy,
+            'redis': redis_healthy,
+            'workers': worker_count,
+            'queue_size': queue_size
+        },
+        'stats': {
+            'total_products': total_products,
+            'active_deals': active_deals,
+            'tasks_today': tasks_today,
+            'worker_count': worker_count
+        },
+        'recent_activity': recent_activity,
+        'timestamp': datetime.utcnow().isoformat()
+    }
+
+
+# ============================================================================
+# CONTROL ACTIONS
+# ============================================================================
+
+@router.post("/control/pause")
+async def pause_all_workers(current_user: models.User = Depends(get_current_user)):
+    """Pause all automatic jobs"""
+    try:
+        if WORKER_CONTROL_FILE.exists():
+            with open(WORKER_CONTROL_FILE, 'r') as f:
+                state = json.load(f)
+        else:
+            state = {}
+        
+        state['scheduler_enabled'] = False
+        state['paused_at'] = datetime.utcnow().isoformat()
+        state['paused_by'] = current_user.username
+        
+        with open(WORKER_CONTROL_FILE, 'w') as f:
+            json.dump(state, f, indent=2)
+        
+        return {'success': True, 'message': 'All jobs paused'}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/control/resume")
+async def resume_all_workers(current_user: models.User = Depends(get_current_user)):
+    """Resume all automatic jobs"""
+    try:
+        if WORKER_CONTROL_FILE.exists():
+            with open(WORKER_CONTROL_FILE, 'r') as f:
+                state = json.load(f)
+        else:
+            state = {}
+        
+        state['scheduler_enabled'] = True
+        state['resumed_at'] = datetime.utcnow().isoformat()
+        state['resumed_by'] = current_user.username
+        
+        with open(WORKER_CONTROL_FILE, 'w') as f:
+            json.dump(state, f, indent=2)
+        
+        return {'success': True, 'message': 'All jobs resumed'}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/control/status")
+async def get_control_status():
+    """Get current control status"""
+    try:
+        if WORKER_CONTROL_FILE.exists():
+            with open(WORKER_CONTROL_FILE, 'r') as f:
+                return json.load(f)
+        else:
+            return {'scheduler_enabled': True, 'jobs': {}}
+    except Exception as e:
+        return {'scheduler_enabled': True, 'jobs': {}, 'error': str(e)}
