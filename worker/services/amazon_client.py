@@ -290,23 +290,18 @@ class AmazonPAAPIClient:
             logger.info(f"Searching browse node {browse_node_id}, page {page}{sort_str}{filters_str}")
             
             # Search using Amazon PA API with filters
-            result = self.api.search_items(
-                browse_node_id=browse_node_id,
-                item_page=page,
-                item_count=min(items_per_page, 10),
-                sort_by=sort_by if sort_by else None,
-                resources=[
-                    'ItemInfo.Title',
-                    'ItemInfo.Features',
-                    'ItemInfo.ProductInfo',
-                    'Offers.Listings.Price',
-                    'Offers.Listings.DeliveryInfo.IsPrimeEligible',
-                    'Images.Primary.Large',
-                    'CustomerReviews.StarRating',  # ← Rating için
-                    'CustomerReviews.Count'         # ← Review count için
-                ],
-                **api_filters  # Pass filters to API
-            )
+            # Note: Using minimal resources set - amazon_paapi library may handle defaults
+            try:
+                result = self.api.search_items(
+                    browse_node_id=browse_node_id,
+                    item_page=page,
+                    item_count=min(items_per_page, 10),
+                    sort_by=sort_by if sort_by else None,
+                    **api_filters  # Pass filters to API
+                )
+            except Exception as e:
+                logger.error(f"Amazon API error: {e}")
+                raise
             
             if not result or not hasattr(result, 'items') or not result.items:
                 logger.info("No items found in response")
