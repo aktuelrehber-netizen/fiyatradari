@@ -27,7 +27,7 @@ router = APIRouter()
 @cache(expire=60)  # Cache for 60 seconds
 async def list_products(
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(100, ge=1, le=10000),
     category_id: Optional[int] = None,
     is_active: Optional[bool] = None,
     is_available: Optional[bool] = None,
@@ -58,8 +58,12 @@ async def list_products(
     # Get total count
     total = query.count()
     
-    # Get paginated results
-    products = query.order_by(desc(models.Product.updated_at)).offset(skip).limit(limit).all()
+    # Get paginated results - Sort by review_count (popularity) then rating
+    products = query.order_by(
+        desc(models.Product.review_count),
+        desc(models.Product.rating),
+        desc(models.Product.updated_at)
+    ).offset(skip).limit(limit).all()
     
     return {
         "items": products,

@@ -86,11 +86,9 @@ export default async function CategoryPage({ params }: PageProps) {
       const catId = category.id
       subcategories = allCategories.filter((cat: Category) => cat.parent_id === catId)
       
-      // Get products only if no subcategories (optimization)
-      if (subcategories.length === 0) {
-        const response = await api.getProductsByCategory(category.id, { limit: 50 })
-        deals = response.items || response || []
-      }
+      // Always get products for the category (and its subcategories)
+      const response = await api.getProductsByCategory(category.id, { limit: 10000 })
+      deals = response.items || response || []
     }
   } catch (error) {
     // Silent fail - show 404 page
@@ -137,8 +135,9 @@ export default async function CategoryPage({ params }: PageProps) {
       </section>
 
       {/* Subcategories */}
-      {subcategories.length > 0 ? (
+      {subcategories.length > 0 && (
         <section className="container mx-auto px-4 py-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">Alt Kategoriler</h2>
           <div className="bg-white rounded-xl p-4 md:p-6 shadow-sm border border-gray-100">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {subcategories.map((subcat) => (
@@ -158,9 +157,10 @@ export default async function CategoryPage({ params }: PageProps) {
             </div>
           </div>
         </section>
-      ) : (
-        /* Products Grid - Only show if no subcategories */
-        <section className="container mx-auto px-4 py-8">
+      )}
+
+      {/* Products Grid - Always show products */}
+      <section className="container mx-auto px-4 py-8">
         {deals.length === 0 ? (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
             <div className="text-4xl mb-3">📦</div>
@@ -267,7 +267,7 @@ export default async function CategoryPage({ params }: PageProps) {
                           rel="noopener noreferrer"
                           className="block w-full bg-[#FF9900] hover:bg-[#FF9900]/90 text-white text-center py-2 rounded-lg text-sm font-semibold transition-all hover:shadow-lg active:scale-95"
                         >
-                          Amazon'da Gör
+                          Satın Al
                         </a>
                       )}
                     </div>
@@ -277,8 +277,7 @@ export default async function CategoryPage({ params }: PageProps) {
             </div>
           </>
         )}
-        </section>
-      )}
+      </section>
     </main>
   )
 }
