@@ -30,7 +30,7 @@ async def list_products(
     limit: int = Query(100, ge=1, le=10000),
     category_id: Optional[int] = None,
     is_active: Optional[bool] = None,
-    is_available: Optional[bool] = None,
+    is_available: Optional[bool] = Query(True, description="Show only in-stock products by default"),
     search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
@@ -57,6 +57,7 @@ async def list_products(
     if is_active is not None:
         query = query.filter(models.Product.is_active == is_active)
     
+    # Always filter by availability (default: show only available products)
     if is_available is not None:
         query = query.filter(models.Product.is_available == is_available)
     
