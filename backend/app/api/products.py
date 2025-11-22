@@ -71,10 +71,19 @@ async def list_products(
     # Get total count
     total = query.count()
     
-    # Get paginated results - Sort by review_count (popularity) then rating
+    # Get paginated results - Sort by discount percentage then rating
+    # Calculate discount: (list_price - current_price) / list_price * 100
+    # Products with discounts first, then by rating
     products = query.order_by(
-        desc(models.Product.review_count),
+        desc(
+            func.coalesce(
+                (models.Product.list_price - models.Product.current_price) / 
+                func.nullif(models.Product.list_price, 0) * 100,
+                0
+            )
+        ),
         desc(models.Product.rating),
+        desc(models.Product.review_count),
         desc(models.Product.updated_at)
     ).offset(skip).limit(limit).all()
     

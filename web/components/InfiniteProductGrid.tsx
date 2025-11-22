@@ -119,6 +119,9 @@ export default function InfiniteProductGrid({
           const discountPercentage = product.list_price && product.current_price
             ? ((parseFloat(product.list_price) - parseFloat(product.current_price)) / parseFloat(product.list_price) * 100)
             : 0
+          
+          const hasDiscount = discountPercentage > 0
+          const buttonText = hasDiscount ? 'Fırsata Git' : 'Satın Al'
 
           return (
             <div
@@ -192,7 +195,7 @@ export default function InfiniteProductGrid({
                   rel="noopener noreferrer"
                   className="block w-full bg-[#FF9900] hover:bg-[#FF9900]/90 text-white text-center py-2 rounded-lg text-sm font-semibold transition-all hover:shadow-lg active:scale-95"
                 >
-                  Satın Al
+                  {buttonText}
                 </a>
               </div>
             </div>
