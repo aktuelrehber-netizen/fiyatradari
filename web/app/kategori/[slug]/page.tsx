@@ -106,31 +106,12 @@ export default async function CategoryPage({ params }: PageProps) {
       {/* Category Header - Modern & Compact */}
       <section className="border-b border-gray-100 bg-white/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-6 md:py-8">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">{category.name}</h1>
-              {category.description && (
-                <p className="text-sm md:text-base text-gray-600 max-w-3xl">
-                  {category.description}
-                </p>
-              )}
-            </div>
-            {(subcategories.length > 0 || totalProducts > 0) && (
-              <div className="flex-shrink-0 text-right">
-                <div className="inline-flex flex-col items-end bg-gradient-to-br from-[#FF9900]/10 to-[#242F3E]/10 px-4 py-3 rounded-xl border border-[#FF9900]/30">
-                  {subcategories.length > 0 ? (
-                    <>
-                      <span className="text-xl md:text-2xl font-bold text-[#FF9900]">{subcategories.length}</span>
-                      <span className="text-xs text-gray-600 mt-0.5">Alt Kategori</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-xl md:text-2xl font-bold text-[#FF9900]">{totalProducts}</span>
-                      <span className="text-xs text-gray-600 mt-0.5">Aktif Fırsat</span>
-                    </>
-                  )}
-                </div>
-              </div>
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">{category.name}</h1>
+            {category.description && (
+              <p className="text-sm md:text-base text-gray-600 max-w-3xl">
+                {category.description}
+              </p>
             )}
           </div>
         </div>
