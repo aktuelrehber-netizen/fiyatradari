@@ -326,6 +326,7 @@ async def trigger_product_fetch(
                     'celery_tasks.fetch_category_products',
                     args=[category_id, browse_node, page],
                     kwargs={},
+                    queue='product_fetch',  # Specify queue
                     priority=8
                 )
                 tasks_dispatched += 1
