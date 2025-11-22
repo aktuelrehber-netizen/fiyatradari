@@ -24,7 +24,7 @@ router = APIRouter()
 
 
 @router.get("/")
-@cache(expire=60)  # Cache for 60 seconds
+@cache(expire=10)  # Cache for 10 seconds (faster updates after rating changes)
 async def list_products(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=10000),
@@ -72,22 +72,24 @@ async def list_products(
     # Get total count
     total = query.count()
     
-    # Get paginated results - Sort by: discount → popularity → rating → newest
-    # 1. Discount percentage (highest first)
-    # 2. Review count (most popular)
-    # 3. Rating (best quality)
-    # 4. Updated date (newest)
+    # Get paginated results - Sort by: quality score → popularity → newest
+    # Quality Score = Rating × (1 + Discount/100)
+    # This balances quality and discount:
+    # - 5⭐ × 50% discount = 7.5 score
+    # - 4⭐ × 70% discount = 6.8 score
+    # - 5⭐ × 20% discount = 6.0 score
+    # Products with both good rating AND discount rank highest
     products = query.order_by(
         desc(
-            func.coalesce(
+            func.coalesce(models.Product.rating, 0) * 
+            (1 + func.coalesce(
                 (models.Product.list_price - models.Product.current_price) / 
-                func.nullif(models.Product.list_price, 0) * 100,
+                func.nullif(models.Product.list_price, 0),
                 0
-            )
+            ))
         ),
-        desc(models.Product.review_count),
-        desc(models.Product.rating),
-        desc(models.Product.updated_at)
+        desc(models.Product.review_count),  # Popularity as tiebreaker
+        desc(models.Product.updated_at)     # Newest as final tiebreaker
     ).offset(skip).limit(limit).all()
     
     return {

@@ -5,8 +5,8 @@ import { notFound } from 'next/navigation'
 import { Metadata } from 'next'
 import InfiniteProductGrid from '@/components/InfiniteProductGrid'
 
-// ISR: Revalidate every 120 seconds (categories change less frequently)
-export const revalidate = 120
+// ISR: Revalidate every 30 seconds (faster updates when ratings change)
+export const revalidate = 30
 
 interface PageProps {
   params: Promise<{
