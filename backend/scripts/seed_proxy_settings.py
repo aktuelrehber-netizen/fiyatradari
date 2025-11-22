@@ -73,7 +73,8 @@ def seed_proxy_settings():
         },
     ]
     
-    with get_db() as db:
+    db = next(get_db())
+    try:
         for setting_data in proxy_settings:
             # Check if setting exists
             existing = db.query(SystemSetting).filter(
@@ -99,6 +100,8 @@ def seed_proxy_settings():
         
         db.commit()
         print("\n✅ Proxy settings seeded successfully!")
+    finally:
+        db.close()
 
 
 if __name__ == '__main__':
