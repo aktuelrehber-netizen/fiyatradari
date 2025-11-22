@@ -31,9 +31,10 @@ router = APIRouter()
 # Redis for real-time data
 redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
-# Control files
-WORKER_CONTROL_FILE = Path("/app/worker_control.json")
-SCHEDULE_FILE = Path("/app/worker_schedule.json")
+# Control files (deprecated - using Redis instead for cross-container communication)
+# These paths are only used for backward compatibility checks
+WORKER_CONTROL_FILE = Path("/tmp/worker_control.json")
+SCHEDULE_FILE = Path("/tmp/worker_schedule.json")
 
 # ============================================================================
 # MODELS
@@ -435,28 +436,21 @@ async def get_system_dashboard(db: Session = Depends(get_db)):
 async def pause_all_workers(current_user: models.User = Depends(get_current_user)):
     """Pause all automatic jobs"""
     try:
-        # Create parent directory if not exists
-        WORKER_CONTROL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        state = {
+            'scheduler_enabled': False,
+            'paused_at': datetime.utcnow().isoformat(),
+            'paused_by': current_user.username
+        }
         
-        if WORKER_CONTROL_FILE.exists():
-            with open(WORKER_CONTROL_FILE, 'r') as f:
-                state = json.load(f)
-        else:
-            state = {}
+        # Save to Redis (primary storage for cross-container communication)
+        redis_client.set('worker:control:state', json.dumps(state))
+        redis_client.set('worker:control:scheduler_enabled', 'false')
         
-        state['scheduler_enabled'] = False
-        state['paused_at'] = datetime.utcnow().isoformat()
-        state['paused_by'] = current_user.username
-        
-        # Write to file
-        with open(WORKER_CONTROL_FILE, 'w') as f:
-            json.dump(state, f, indent=2)
-        
-        # Also save to Redis for faster access
-        redis_client.set('worker:control:scheduler_enabled', 'false', ex=86400)
+        logger.info(f"Scheduler paused by {current_user.username}")
         
         return {'success': True, 'message': 'All jobs paused', 'state': state}
     except Exception as e:
+        logger.error(f"Failed to pause scheduler: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -464,28 +458,21 @@ async def pause_all_workers(current_user: models.User = Depends(get_current_user
 async def resume_all_workers(current_user: models.User = Depends(get_current_user)):
     """Resume all automatic jobs"""
     try:
-        # Create parent directory if not exists
-        WORKER_CONTROL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        state = {
+            'scheduler_enabled': True,
+            'resumed_at': datetime.utcnow().isoformat(),
+            'resumed_by': current_user.username
+        }
         
-        if WORKER_CONTROL_FILE.exists():
-            with open(WORKER_CONTROL_FILE, 'r') as f:
-                state = json.load(f)
-        else:
-            state = {}
+        # Save to Redis (primary storage for cross-container communication)
+        redis_client.set('worker:control:state', json.dumps(state))
+        redis_client.set('worker:control:scheduler_enabled', 'true')
         
-        state['scheduler_enabled'] = True
-        state['resumed_at'] = datetime.utcnow().isoformat()
-        state['resumed_by'] = current_user.username
-        
-        # Write to file
-        with open(WORKER_CONTROL_FILE, 'w') as f:
-            json.dump(state, f, indent=2)
-        
-        # Also save to Redis for faster access
-        redis_client.set('worker:control:scheduler_enabled', 'true', ex=86400)
+        logger.info(f"Scheduler resumed by {current_user.username}")
         
         return {'success': True, 'message': 'All jobs resumed', 'state': state}
     except Exception as e:
+        logger.error(f"Failed to resume scheduler: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -493,10 +480,48 @@ async def resume_all_workers(current_user: models.User = Depends(get_current_use
 async def get_control_status():
     """Get current control status"""
     try:
-        if WORKER_CONTROL_FILE.exists():
-            with open(WORKER_CONTROL_FILE, 'r') as f:
-                return json.load(f)
+        # Read from Redis (primary storage)
+        state_json = redis_client.get('worker:control:state')
+        if state_json:
+            return json.loads(state_json)
         else:
+            # Default state
             return {'scheduler_enabled': True, 'jobs': {}}
     except Exception as e:
+        logger.error(f"Failed to get control status: {e}")
         return {'scheduler_enabled': True, 'jobs': {}, 'error': str(e)}
+
+
+@router.post("/workers/restart")
+async def restart_workers(current_user: models.User = Depends(get_current_user)):
+    """
+    Restart celery workers to apply pool size changes
+    Uses Docker API to restart workers
+    """
+    try:
+        import docker
+        
+        client = docker.from_env()
+        
+        # Find all celery_worker containers
+        containers = client.containers.list(filters={'name': 'celery_worker'})
+        
+        if not containers:
+            return {
+                'success': False,
+                'message': 'No celery worker containers found'
+            }
+        
+        restarted = []
+        for container in containers:
+            container.restart(timeout=10)
+            restarted.append(container.name)
+        
+        return {
+            'success': True,
+            'message': f'Restarted {len(restarted)} worker(s)',
+            'containers': restarted
+        }
+    except Exception as e:
+        logger.error(f"Failed to restart workers: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to restart workers: {str(e)}")

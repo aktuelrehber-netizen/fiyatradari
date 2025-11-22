@@ -49,3 +49,6 @@ sentry-sdk[fastapi]==1.39.2
 # Metrics
 prometheus-client==0.19.0
 prometheus-fastapi-instrumentator==6.1.0
+
+# Docker API
+docker==7.0.0

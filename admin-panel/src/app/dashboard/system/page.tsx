@@ -126,12 +126,12 @@ export default function SystemManagementPage() {
   const handleScalePool = async (newSize: number) => {
     try {
       setActionLoading(true)
-      const result = await systemAPI.scaleWorkerPool(newSize)
+      await systemAPI.scaleWorkerPool(newSize)
       
       toast({
-        title: '✅ Yapılandırma Kaydedildi',
-        description: `Pool size ${newSize} olarak ayarlandı. Değişikliklerin etkili olması için worker'ları restart edin.`,
-        duration: 8000
+        title: '✅ Pool Size Kaydedildi',
+        description: `Worker pool ${newSize} olarak ayarlandı`,
+        duration: 3000
       })
       
       setPoolSize(newSize)
@@ -139,6 +139,41 @@ export default function SystemManagementPage() {
       toast({
         title: '❌ Hata',
         description: 'Pool size kaydedilemedi',
+        variant: 'destructive'
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+  
+  // Restart workers
+  const handleRestartWorkers = async () => {
+    try {
+      setActionLoading(true)
+      const result = await systemAPI.restartWorkers()
+      
+      if (result.success) {
+        toast({
+          title: '🔄 Worker\'lar Yeniden Başlatılıyor',
+          description: result.message || 'Pool size 10-15 saniyede etkili olacak',
+          duration: 5000
+        })
+        
+        // Reload pool status after delay
+        setTimeout(() => {
+          loadPoolStatus()
+        }, 15000)
+      } else {
+        toast({
+          title: '❌ Restart Başarısız',
+          description: result.message || 'Worker\'lar restart edilemedi',
+          variant: 'destructive'
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: '❌ Hata',
+        description: error.response?.data?.detail || 'Worker restart başarısız',
         variant: 'destructive'
       })
     } finally {
@@ -345,25 +380,32 @@ export default function SystemManagementPage() {
             </div>
 
             <div className="space-y-2">
-              <Button
-                onClick={() => handleScalePool(poolSize)}
-                disabled={actionLoading}
-                className="w-full"
-                size="lg"
-              >
-                {actionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
-                Yapılandırmayı Kaydet
-              </Button>
-              
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-xs font-medium text-blue-900 mb-2">📋 Worker Restart Komutu:</p>
-                <code className="text-xs bg-white px-2 py-1 rounded border block">
-                  docker compose restart celery_worker
-                </code>
-                <p className="text-xs text-blue-700 mt-2">
-                  ⚡ Sunucuda bu komutu çalıştırın (10-15 saniye sürer)
-                </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() => handleScalePool(poolSize)}
+                  disabled={actionLoading}
+                  className="w-full"
+                  size="lg"
+                >
+                  {actionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                  Kaydet
+                </Button>
+                
+                <Button
+                  onClick={handleRestartWorkers}
+                  disabled={actionLoading}
+                  variant="secondary"
+                  className="w-full"
+                  size="lg"
+                >
+                  {actionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  Restart
+                </Button>
               </div>
+              
+              <p className="text-xs text-muted-foreground text-center">
+                💡 Kaydet → Restart yaparak pool size'ı uygulayın
+              </p>
             </div>
 
             <div className="pt-4 border-t space-y-2">
