@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
+import { systemAPI } from '@/utils/api-client'
 import { 
   Activity, Server, Zap, Database, Clock, Play, Pause, 
   RefreshCw, Loader2, X, TrendingUp, AlertCircle, CheckCircle2
@@ -53,8 +54,7 @@ export default function SystemManagementPage() {
   // Load dashboard data
   const loadDashboard = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/system/dashboard')
-      const data = await response.json()
+      const data = await systemAPI.getDashboard()
       
       setHealth(data.health)
       setStats(data.stats)
@@ -68,8 +68,7 @@ export default function SystemManagementPage() {
   // Load schedules
   const loadSchedules = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/system/schedules')
-      const data = await response.json()
+      const data = await systemAPI.getSchedules()
       setSchedules(data.schedules || {})
     } catch (error) {
       console.error('Failed to load schedules:', error)
@@ -79,8 +78,7 @@ export default function SystemManagementPage() {
   // Load active tasks
   const loadActiveTasks = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/system/tasks/active')
-      const data = await response.json()
+      const data = await systemAPI.getActiveTasks()
       setActiveTasks(data.tasks || [])
     } catch (error) {
       console.error('Failed to load tasks:', error)
@@ -90,8 +88,7 @@ export default function SystemManagementPage() {
   // Load worker pool status
   const loadPoolStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/system/workers/pool')
-      const data = await response.json()
+      const data = await systemAPI.getWorkerPool()
       setPoolSize(data.current_size || 4)
     } catch (error) {
       console.error('Failed to load pool status:', error)
@@ -101,8 +98,7 @@ export default function SystemManagementPage() {
   // Load control status
   const loadControlStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/system/control/status')
-      const data = await response.json()
+      const data = await systemAPI.getControlStatus()
       setIsRunning(data.scheduler_enabled !== false)
     } catch (error) {
       console.error('Failed to load control status:', error)
@@ -130,16 +126,7 @@ export default function SystemManagementPage() {
   const handleScalePool = async (newSize: number) => {
     try {
       setActionLoading(true)
-      const token = localStorage.getItem('token')
-      
-      const response = await fetch(`http://localhost:8000/api/v1/system/workers/pool/scale?size=${newSize}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      
-      if (!response.ok) throw new Error('Failed to scale pool')
+      await systemAPI.scaleWorkerPool(newSize)
       
       toast({
         title: '✅ Pool Scaled',
@@ -162,17 +149,12 @@ export default function SystemManagementPage() {
   const handleToggleScheduler = async () => {
     try {
       setActionLoading(true)
-      const token = localStorage.getItem('token')
-      const endpoint = isRunning ? 'pause' : 'resume'
       
-      const response = await fetch(`http://localhost:8000/api/v1/system/control/${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      
-      if (!response.ok) throw new Error('Failed to toggle scheduler')
+      if (isRunning) {
+        await systemAPI.pauseAll()
+      } else {
+        await systemAPI.resumeAll()
+      }
       
       toast({
         title: isRunning ? '⏸️ Paused' : '▶️ Resumed',
@@ -194,16 +176,7 @@ export default function SystemManagementPage() {
   // Update schedule
   const handleUpdateSchedule = async (jobType: string, enabled: boolean, cron: string) => {
     try {
-      const token = localStorage.getItem('token')
-      
-      const response = await fetch(`http://localhost:8000/api/v1/system/schedules/${jobType}?enabled=${enabled}&cron=${encodeURIComponent(cron)}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      
-      if (!response.ok) throw new Error('Failed to update schedule')
+      await systemAPI.updateSchedule(jobType, enabled, cron)
       
       toast({
         title: '✅ Schedule Updated',
@@ -223,16 +196,7 @@ export default function SystemManagementPage() {
   // Cancel task
   const handleCancelTask = async (taskId: string) => {
     try {
-      const token = localStorage.getItem('token')
-      
-      const response = await fetch(`http://localhost:8000/api/v1/system/tasks/${taskId}/cancel`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      
-      if (!response.ok) throw new Error('Failed to cancel task')
+      await systemAPI.cancelTask(taskId)
       
       toast({
         title: '✅ Task Cancelled',

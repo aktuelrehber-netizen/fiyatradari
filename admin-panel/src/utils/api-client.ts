@@ -343,3 +343,58 @@ export const amazonAPI = {
     return response.data
   },
 }
+
+// System Management API
+export const systemAPI = {
+  getDashboard: async () => {
+    const response = await apiClient.get('/system/dashboard')
+    return response.data
+  },
+  
+  getWorkerPool: async () => {
+    const response = await apiClient.get('/system/workers/pool')
+    return response.data
+  },
+  
+  scaleWorkerPool: async (size: number) => {
+    const response = await apiClient.post(`/system/workers/pool/scale?size=${size}`)
+    return response.data
+  },
+  
+  getSchedules: async () => {
+    const response = await apiClient.get('/system/schedules')
+    return response.data
+  },
+  
+  updateSchedule: async (jobType: string, enabled: boolean, cron: string) => {
+    const response = await apiClient.post(
+      `/system/schedules/${jobType}?enabled=${enabled}&cron=${encodeURIComponent(cron)}`
+    )
+    return response.data
+  },
+  
+  getActiveTasks: async () => {
+    const response = await apiClient.get('/system/tasks/active')
+    return response.data
+  },
+  
+  cancelTask: async (taskId: string) => {
+    const response = await apiClient.post(`/system/tasks/${taskId}/cancel`)
+    return response.data
+  },
+  
+  pauseAll: async () => {
+    const response = await apiClient.post('/system/control/pause')
+    return response.data
+  },
+  
+  resumeAll: async () => {
+    const response = await apiClient.post('/system/control/resume')
+    return response.data
+  },
+  
+  getControlStatus: async () => {
+    const response = await apiClient.get('/system/control/status')
+    return response.data
+  },
+}
