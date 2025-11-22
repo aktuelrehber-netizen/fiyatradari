@@ -37,19 +37,30 @@ export default function SystemDashboard() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
 
-  // Load data
+  // Load data from unified system API
   const loadData = useCallback(async () => {
     try {
-      const [healthData, controlData] = await Promise.all([
-        healthAPI.services().catch(() => ({ services: {} })),
-        workersAPI.getControlStatus().catch(() => null)
-      ])
-
+      const response = await fetch('http://localhost:8000/api/v1/system/overview')
+      const data = await response.json()
+      
+      // Transform data for state
       setHealth({
-        status: 'healthy',
-        services: healthData.services || {}
+        status: data.health.status,
+        services: {
+          database: { status: data.health.database },
+          redis: { status: data.health.redis },
+          workers: { status: data.health.workers_online > 0 ? 'healthy' : 'unhealthy' }
+        }
       })
-      setWorkerControl(controlData)
+      
+      // Get worker control status separately (if exists)
+      try {
+        const controlData = await workersAPI.getControlStatus()
+        setWorkerControl(controlData)
+      } catch {
+        setWorkerControl(null)
+      }
+      
       setLoading(false)
     } catch (error) {
       console.error('Failed to load system data:', error)
