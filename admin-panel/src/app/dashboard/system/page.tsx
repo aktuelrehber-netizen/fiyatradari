@@ -129,51 +129,16 @@ export default function SystemManagementPage() {
       const result = await systemAPI.scaleWorkerPool(newSize)
       
       toast({
-        title: '✅ Configuration Saved',
-        description: result.message || `Pool size set to ${newSize}. Restart workers to apply.`,
-        duration: 5000
+        title: '✅ Yapılandırma Kaydedildi',
+        description: `Pool size ${newSize} olarak ayarlandı. Değişikliklerin etkili olması için worker'ları restart edin.`,
+        duration: 8000
       })
       
       setPoolSize(newSize)
     } catch (error) {
       toast({
-        title: '❌ Error',
-        description: 'Failed to save pool size',
-        variant: 'destructive'
-      })
-    } finally {
-      setActionLoading(false)
-    }
-  }
-  
-  // Restart workers
-  const handleRestartWorkers = async () => {
-    try {
-      setActionLoading(true)
-      const result = await systemAPI.restartWorkers()
-      
-      if (result.success) {
-        toast({
-          title: '🔄 Workers Restarting',
-          description: 'Pool size will be applied in 10-15 seconds...',
-          duration: 5000
-        })
-        
-        // Reload pool status after a delay
-        setTimeout(() => {
-          loadPoolStatus()
-        }, 15000)
-      } else {
-        toast({
-          title: '❌ Restart Failed',
-          description: result.message || 'Could not restart workers',
-          variant: 'destructive'
-        })
-      }
-    } catch (error) {
-      toast({
-        title: '❌ Error',
-        description: 'Failed to restart workers',
+        title: '❌ Hata',
+        description: 'Pool size kaydedilemedi',
         variant: 'destructive'
       })
     } finally {
@@ -390,20 +355,15 @@ export default function SystemManagementPage() {
                 Yapılandırmayı Kaydet
               </Button>
               
-              <Button
-                onClick={handleRestartWorkers}
-                disabled={actionLoading}
-                variant="outline"
-                className="w-full"
-                size="lg"
-              >
-                {actionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Worker'ları Yeniden Başlat
-              </Button>
-              
-              <p className="text-xs text-muted-foreground text-center pt-2">
-                💡 Pool size değişiklikleri worker restart sonrası etkili olur
-              </p>
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs font-medium text-blue-900 mb-2">📋 Worker Restart Komutu:</p>
+                <code className="text-xs bg-white px-2 py-1 rounded border block">
+                  docker compose restart celery_worker
+                </code>
+                <p className="text-xs text-blue-700 mt-2">
+                  ⚡ Sunucuda bu komutu çalıştırın (10-15 saniye sürer)
+                </p>
+              </div>
             </div>
 
             <div className="pt-4 border-t space-y-2">
