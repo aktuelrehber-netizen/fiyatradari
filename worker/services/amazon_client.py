@@ -432,6 +432,15 @@ class AmazonPAAPIClient:
             # Extract rating data
             rating = None
             review_count = None
+            
+            # Debug: Check if customer_reviews exists
+            if not hasattr(item, 'customer_reviews'):
+                logger.warning(f"ASIN {item.asin}: No customer_reviews attribute in API response")
+            elif not item.customer_reviews:
+                logger.warning(f"ASIN {item.asin}: customer_reviews is None/empty")
+            else:
+                logger.info(f"ASIN {item.asin}: customer_reviews EXISTS - checking fields...")
+            
             if hasattr(item, 'customer_reviews') and item.customer_reviews:
                 # Parse star rating (format: "4.5 out of 5 stars" or float)
                 if hasattr(item.customer_reviews, 'star_rating') and item.customer_reviews.star_rating:
@@ -447,7 +456,7 @@ class AmazonPAAPIClient:
                         match = re.search(r'(\d+\.?\d*)', rating_str)
                         if match:
                             rating = float(match.group(1))
-                            logger.debug(f"ASIN {item.asin}: Parsed rating {rating} from '{rating_str}'")
+                            logger.info(f"✅ ASIN {item.asin}: Parsed rating {rating} from '{rating_str}'")
                     except (ValueError, AttributeError) as e:
                         logger.warning(f"ASIN {item.asin}: Failed to parse rating: {e}")
                 
@@ -456,7 +465,7 @@ class AmazonPAAPIClient:
                     try:
                         review_count = int(item.customer_reviews.count) if item.customer_reviews.count else None
                         if review_count:
-                            logger.debug(f"ASIN {item.asin}: Found {review_count} reviews")
+                            logger.info(f"✅ ASIN {item.asin}: Found {review_count} reviews")
                     except (ValueError, TypeError) as e:
                         logger.warning(f"ASIN {item.asin}: Failed to parse review count: {e}")
             
