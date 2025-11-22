@@ -39,7 +39,20 @@ async def list_products(
     query = db.query(models.Product)
     
     if category_id:
-        query = query.filter(models.Product.category_id == category_id)
+        # Get all subcategory IDs recursively
+        def get_all_subcategory_ids(parent_id: int) -> list[int]:
+            """Recursively get all subcategory IDs"""
+            category_ids = [parent_id]
+            subcategories = db.query(models.Category).filter(
+                models.Category.parent_id == parent_id
+            ).all()
+            for subcat in subcategories:
+                category_ids.extend(get_all_subcategory_ids(subcat.id))
+            return category_ids
+        
+        # Include products from category and all subcategories
+        all_category_ids = get_all_subcategory_ids(category_id)
+        query = query.filter(models.Product.category_id.in_(all_category_ids))
     
     if is_active is not None:
         query = query.filter(models.Product.is_active == is_active)

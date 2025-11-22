@@ -186,16 +186,14 @@ export default function InfiniteProductGrid({
                 </div>
 
                 {/* Amazon Link */}
-                {product.detail_page_url && (
-                  <a
-                    href={product.detail_page_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block w-full bg-[#FF9900] hover:bg-[#FF9900]/90 text-white text-center py-2 rounded-lg text-sm font-semibold transition-all hover:shadow-lg active:scale-95"
-                  >
-                    Satın Al
-                  </a>
-                )}
+                <a
+                  href={product.detail_page_url || `https://www.amazon.com.tr/dp/${product.asin}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full bg-[#FF9900] hover:bg-[#FF9900]/90 text-white text-center py-2 rounded-lg text-sm font-semibold transition-all hover:shadow-lg active:scale-95"
+                >
+                  Satın Al
+                </a>
               </div>
             </div>
           )
