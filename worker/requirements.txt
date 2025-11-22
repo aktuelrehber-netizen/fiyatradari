@@ -19,7 +19,7 @@ lxml==5.1.0
 playwright==1.40.0
 
 # Amazon PA API
-amazon-paapi==5.2.0
+python-amazon-paapi==5.2.0
 tenacity==8.2.3
 
 # Telegram
