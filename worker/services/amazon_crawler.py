@@ -4,6 +4,8 @@ Scrapes product data from Amazon.com.tr when API is unavailable
 """
 import re
 import time
+import asyncio
+import random
 from typing import Dict, Optional, List
 from decimal import Decimal
 from loguru import logger
@@ -15,12 +17,26 @@ class AmazonCrawler:
     """
     Amazon.com.tr web crawler for product data extraction
     Used as fallback when PA-API rate limit is reached
+    
+    Features:
+    - Async support with 2 concurrent requests (2x faster)
+    - User-Agent rotation (looks like different browsers)
+    - Retry logic with exponential backoff
+    - Random delays (5-8s) to avoid pattern detection
     """
+    
+    # Multiple User-Agents to rotate (look like different browsers)
+    USER_AGENTS = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    ]
     
     def __init__(self):
         self.base_url = "https://www.amazon.com.tr"
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        self._base_headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
             'Accept-Encoding': 'gzip, deflate, br',
@@ -37,11 +53,16 @@ class AmazonCrawler:
         self.last_request_time = 0
         self.min_interval = 5.0  # Minimum 5 seconds
         self.max_interval = 8.0  # Maximum 8 seconds (randomized)
+        self.semaphore = asyncio.Semaphore(2)  # Max 2 concurrent requests
+    
+    def _get_random_headers(self) -> dict:
+        """Get headers with random User-Agent"""
+        headers = self._base_headers.copy()
+        headers['User-Agent'] = random.choice(self.USER_AGENTS)
+        return headers
     
     def _wait_if_needed(self):
         """Rate limiting with random delay to avoid pattern detection"""
-        import random
-        
         now = time.time()
         elapsed = now - self.last_request_time
         
@@ -55,9 +76,24 @@ class AmazonCrawler:
         
         self.last_request_time = time.time()
     
+    async def _wait_if_needed_async(self):
+        """Async rate limiting with random delay"""
+        now = time.time()
+        elapsed = now - self.last_request_time
+        
+        # Random delay between min and max interval
+        required_interval = random.uniform(self.min_interval, self.max_interval)
+        
+        if elapsed < required_interval:
+            sleep_time = required_interval - elapsed
+            logger.debug(f"Rate limiting: sleeping {sleep_time:.1f}s")
+            await asyncio.sleep(sleep_time)
+        
+        self.last_request_time = time.time()
+    
     def get_product(self, asin: str) -> Optional[Dict]:
         """
-        Crawl product page and extract data
+        Crawl product page and extract data (sync version)
         
         Args:
             asin: Amazon ASIN
@@ -70,7 +106,7 @@ class AmazonCrawler:
         url = f"{self.base_url}/dp/{asin}"
         
         try:
-            with httpx.Client(timeout=30.0, follow_redirects=True, headers=self.headers) as client:
+            with httpx.Client(timeout=30.0, follow_redirects=True, headers=self._get_random_headers()) as client:
                 logger.info(f"Crawling: {url}")
                 response = client.get(url)
                 response.raise_for_status()
@@ -113,9 +149,100 @@ class AmazonCrawler:
             logger.error(f"Error crawling {asin}: {e}")
             return None
     
+    async def get_product_async(self, asin: str, max_retries: int = 2) -> Optional[Dict]:
+        """
+        Crawl product page asynchronously with retry logic
+        
+        Args:
+            asin: Amazon ASIN
+            max_retries: Maximum retry attempts on failure
+            
+        Returns:
+            Product data dict or None if failed
+        """
+        url = f"{self.base_url}/dp/{asin}"
+        
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.semaphore:  # Limit concurrent requests
+                    await self._wait_if_needed_async()
+                    
+                    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers=self._get_random_headers()) as client:
+                        logger.info(f"Crawling: {url} (attempt {attempt + 1}/{max_retries + 1})")
+                        response = await client.get(url)
+                        response.raise_for_status()
+                        
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        
+                        # Extract data
+                        current_price = self._extract_price(soup)
+                        is_available = current_price is not None
+                        
+                        product_data = {
+                            'asin': asin,
+                            'title': self._extract_title(soup),
+                            'current_price': current_price,
+                            'currency': 'TRY',
+                            'is_available': is_available,
+                            'image_url': self._extract_image(soup),
+                            'rating': self._extract_rating(soup),
+                            'review_count': self._extract_review_count(soup),
+                            'detail_page_url': url,
+                            'source': 'crawler'
+                        }
+                        
+                        if not is_available:
+                            logger.warning(f"⚠️ ASIN {asin}: No price found → Marked as OUT OF STOCK")
+                        
+                        title = product_data.get('title') or 'N/A'
+                        title_preview = title[:50] if title else 'N/A'
+                        logger.info(f"Crawled ASIN {asin}: {title_preview}, Price: {product_data.get('current_price')}")
+                        return product_data
+                        
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    logger.warning(f"Product not found: {asin}")
+                    return None
+                elif attempt < max_retries:
+                    backoff = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                    logger.warning(f"HTTP error {e.response.status_code} for {asin}, retrying in {backoff}s...")
+                    await asyncio.sleep(backoff)
+                else:
+                    logger.error(f"HTTP error crawling {asin} after {max_retries} retries: {e}")
+                    return None
+            except Exception as e:
+                if attempt < max_retries:
+                    backoff = 2 ** attempt
+                    logger.warning(f"Error crawling {asin}, retrying in {backoff}s: {e}")
+                    await asyncio.sleep(backoff)
+                else:
+                    logger.error(f"Error crawling {asin} after {max_retries} retries: {e}")
+                    return None
+        
+        return None
+    
+    async def get_products_async(self, asins: List[str]) -> List[Dict]:
+        """
+        Crawl multiple products concurrently (max 2 at a time)
+        
+        Args:
+            asins: List of ASINs
+            
+        Returns:
+            List of product data dicts (None entries filtered out)
+        """
+        logger.info(f"Starting async crawl for {len(asins)} products (max 2 concurrent)")
+        tasks = [self.get_product_async(asin) for asin in asins]
+        results = await asyncio.gather(*tasks)
+        
+        # Filter out None results
+        valid_results = [r for r in results if r is not None]
+        logger.info(f"Async crawl complete: {len(valid_results)}/{len(asins)} succeeded")
+        return valid_results
+    
     def get_products(self, asins: List[str]) -> List[Dict]:
         """
-        Crawl multiple products
+        Crawl multiple products (sync wrapper for async method)
         
         Args:
             asins: List of ASINs
@@ -123,12 +250,7 @@ class AmazonCrawler:
         Returns:
             List of product data dicts
         """
-        results = []
-        for asin in asins:
-            product = self.get_product(asin)
-            if product:
-                results.append(product)
-        return results
+        return asyncio.run(self.get_products_async(asins))
     
     def _extract_title(self, soup: BeautifulSoup) -> Optional[str]:
         """Extract product title"""

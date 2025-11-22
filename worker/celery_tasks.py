@@ -695,34 +695,38 @@ def update_missing_ratings() -> Dict:
             Product.is_active == True
         ).order_by(Product.created_at.desc()).limit(25).all()
         
+        # Extract ASINs
+        asins = [p.asin for p in products_without_rating]
+        
+        # Crawl all products concurrently (2 at a time with retry logic)
+        # This will be 2x faster than sequential crawling
+        crawled_products = crawler.get_products(asins)
+        
+        # Create ASIN -> data mapping for quick lookup
+        crawled_map = {p['asin']: p for p in crawled_products}
+        
         updated_count = 0
         failed_count = 0
         
+        # Update database with crawled data
         for product in products_without_rating:
-            try:
-                # Crawl product page
-                crawled_data = crawler.get_product(product.asin)
+            crawled_data = crawled_map.get(product.asin)
+            
+            if crawled_data:
+                # Update rating and review count
+                if crawled_data.get('rating'):
+                    product.rating = crawled_data['rating']
+                    logger.info(f"✓ ASIN {product.asin}: Updated rating to {crawled_data['rating']}")
                 
-                if crawled_data:
-                    # Update rating and review count
-                    if crawled_data.get('rating'):
-                        product.rating = crawled_data['rating']
-                        logger.info(f"✓ ASIN {product.asin}: Updated rating to {crawled_data['rating']}")
-                    
-                    if crawled_data.get('review_count'):
-                        product.review_count = crawled_data['review_count']
-                        logger.info(f"✓ ASIN {product.asin}: Updated review_count to {crawled_data['review_count']}")
-                    
-                    product.last_checked_at = datetime.utcnow()
-                    updated_count += 1
-                else:
-                    failed_count += 1
-                    logger.warning(f"✗ ASIN {product.asin}: Crawler returned no data")
-                    
-            except Exception as e:
+                if crawled_data.get('review_count'):
+                    product.review_count = crawled_data['review_count']
+                    logger.info(f"✓ ASIN {product.asin}: Updated review_count to {crawled_data['review_count']}")
+                
+                product.last_checked_at = datetime.utcnow()
+                updated_count += 1
+            else:
                 failed_count += 1
-                logger.error(f"✗ ASIN {product.asin}: Crawler error: {e}")
-                continue
+                logger.warning(f"✗ ASIN {product.asin}: Crawler returned no data")
         
         db.commit()
         
