@@ -4,8 +4,11 @@ Features: Retry logic, rate limiting, error handling, connection pooling
 """
 import time
 from typing import List, Dict, Optional, Any
-from decimal import Decimal
 from datetime import datetime, timedelta
+from decimal import Decimal
+import os
+import json
+import redis
 from loguru import logger
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -22,28 +25,91 @@ from services.amazon_crawler import AmazonCrawler
 
 
 class RateLimiter:
-    """Token bucket rate limiter for API calls"""
-    
+    """
+    Distributed rate limiter using Redis
+    Ensures all workers respect 1 request/second limit globally
+    """
     def __init__(self, calls_per_second: float = 1.0):
-        self.calls_per_second = calls_per_second
-        self.tokens = calls_per_second
-        self.last_update = time.time()
-        self.min_interval = 1.0 / calls_per_second
+        self.min_interval = 1.0 / calls_per_second  # 1 second between requests
+        try:
+            self.redis_client = redis.Redis(
+                host=os.getenv('REDIS_HOST', 'redis'),
+                port=int(os.getenv('REDIS_PORT', 6379)),
+                db=2,  # Separate DB for rate limiting
+                decode_responses=False,
+                socket_connect_timeout=2
+            )
+            self.redis_client.ping()  # Test connection
+            self.use_redis = True
+            logger.info("✅ Redis rate limiter initialized")
+        except Exception as e:
+            logger.warning(f"⚠️  Redis unavailable, using local rate limiter: {e}")
+            self.use_redis = False
+            self.last_call = 0
+        
+        self.key = 'amazon_api_last_call'
     
     def wait_if_needed(self):
-        """Wait if rate limit is exceeded"""
-        now = time.time()
-        elapsed = now - self.last_update
-        self.tokens = min(self.calls_per_second, self.tokens + elapsed * self.calls_per_second)
-        self.last_update = now
+        """Wait if needed to respect rate limit (distributed across workers)"""
+        if not self.use_redis:
+            # Fallback: Local rate limiter (not distributed)
+            now = time.time()
+            elapsed = now - self.last_call
+            if elapsed < self.min_interval:
+                sleep_time = self.min_interval - elapsed
+                logger.debug(f"Local rate limit: sleeping {sleep_time:.2f}s")
+                time.sleep(sleep_time)
+            self.last_call = time.time()
+            return
         
-        if self.tokens < 1:
-            sleep_time = (1 - self.tokens) / self.calls_per_second
-            logger.debug(f"Rate limit: sleeping {sleep_time:.2f}s")
-            time.sleep(sleep_time)
-            self.tokens = 1
-        
-        self.tokens -= 1
+        # Redis-based distributed rate limiter
+        try:
+            # Acquire lock and wait if needed
+            lock_acquired = False
+            max_wait = 10  # Maximum 10 seconds wait
+            start_time = time.time()
+            
+            while not lock_acquired and (time.time() - start_time) < max_wait:
+                # Try to acquire lock
+                lock_acquired = self.redis_client.set(
+                    f'{self.key}:lock',
+                    '1',
+                    ex=2,  # Lock expires in 2 seconds
+                    nx=True  # Only set if doesn't exist
+                )
+                
+                if not lock_acquired:
+                    time.sleep(0.01)  # Wait 10ms and retry
+            
+            if not lock_acquired:
+                logger.warning("Failed to acquire rate limit lock, proceeding anyway")
+                return
+            
+            # Check last call time
+            last_call_bytes = self.redis_client.get(self.key)
+            last_call = float(last_call_bytes.decode()) if last_call_bytes else 0
+            
+            now = time.time()
+            elapsed = now - last_call
+            
+            if elapsed < self.min_interval:
+                sleep_time = self.min_interval - elapsed
+                logger.debug(f"Distributed rate limit: sleeping {sleep_time:.2f}s")
+                time.sleep(sleep_time)
+            
+            # Update last call time
+            self.redis_client.set(self.key, str(time.time()), ex=10)
+            
+            # Release lock
+            self.redis_client.delete(f'{self.key}:lock')
+            
+        except Exception as e:
+            logger.error(f"Rate limiter error: {e}, proceeding without rate limit")
+            # Release lock on error
+            try:
+                self.redis_client.delete(f'{self.key}:lock')
+            except:
+                pass
 
 
 class AmazonPAAPIClient:
