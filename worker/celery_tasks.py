@@ -14,6 +14,10 @@ from database import get_db, Product, PriceHistory, Deal, WorkerLog, Category
 from services.amazon_client import AmazonPAAPIClient
 from services.deal_detector import DealDetector
 from config import config
+from worker_control import WorkerControl
+
+# Initialize worker control
+worker_control = WorkerControl()
 
 
 # ============================================================================
@@ -351,6 +355,11 @@ def continuous_queue_refill() -> Dict:
     
     Uses dynamic priority mapping with flexible intervals
     """
+    # Check if job should run
+    if not worker_control.should_run_job('check_prices'):
+        logger.warning("Price check job is disabled or scheduler is paused")
+        return {"status": "skipped", "reason": "Job disabled or scheduler paused"}
+    
     try:
         with get_db() as db:
             # Critical priority (90-100): Check every 15 minutes
@@ -534,6 +543,11 @@ def schedule_product_fetch() -> Dict:
     Schedule product fetching from Amazon
     Called daily by Celery Beat
     """
+    # Check if job should run
+    if not worker_control.should_run_job('fetch_products'):
+        logger.warning("Product fetch job is disabled or scheduler is paused")
+        return {"status": "skipped", "reason": "Job disabled or scheduler paused"}
+    
     logger.info("Scheduling product fetch")
     
     with get_db() as db:
@@ -573,6 +587,11 @@ def schedule_notifications() -> Dict:
     Schedule Telegram notifications for new deals
     Called every 30 minutes by Celery Beat
     """
+    # Check if job should run
+    if not worker_control.should_run_job('send_telegram'):
+        logger.warning("Telegram notification job is disabled or scheduler is paused")
+        return {"status": "skipped", "reason": "Job disabled or scheduler paused"}
+    
     logger.info("Scheduling deal notifications")
     
     with get_db() as db:
@@ -679,6 +698,11 @@ def update_missing_ratings() -> Dict:
     NOTE: Amazon PA-API doesn't return CustomerReviews data without special access.
     This task fills the gap by crawling Amazon.com.tr for rating/review data.
     """
+    # Check if job should run
+    if not worker_control.should_run_job('update_missing_ratings'):
+        logger.warning("Update ratings job is disabled or scheduler is paused")
+        return {"status": "skipped", "reason": "Job disabled or scheduler paused"}
+    
     logger.info("Starting missing ratings update via crawler")
     
     from services.amazon_crawler import AmazonCrawler

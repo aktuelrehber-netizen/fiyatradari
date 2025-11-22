@@ -146,12 +146,17 @@ async def scale_worker_pool(
             'result_backend': 'redis://redis:6379/1',
         })
         
-        # Send pool resize command to all workers
-        celery_app.control.pool_grow(n=size)
+        # Use autoscale to set min and max concurrency
+        # autoscale(max, min) - sets the pool size range
+        celery_app.control.autoscale(max=size, min=size)
         
-        # Save configuration
-        config = {'pool_size': size, 'updated_at': datetime.utcnow().isoformat()}
-        redis_client.set('worker:pool:config', json.dumps(config))
+        # Save configuration to Redis
+        config = {
+            'pool_size': size, 
+            'updated_at': datetime.utcnow().isoformat(),
+            'updated_by': current_user.username
+        }
+        redis_client.set('worker:pool:config', json.dumps(config), ex=3600)
         
         return {
             'success': True,
@@ -362,12 +367,13 @@ async def get_system_dashboard(db: Session = Depends(get_db)):
     health_status = 'healthy' if health_score >= 80 else 'degraded' if health_score >= 50 else 'critical'
     
     # === DATABASE STATS ===
-    total_products = db.query(models.Product).count()
+    total_products = db.query(models.Product).filter(models.Product.is_active == True).count()
     active_deals = db.query(models.Deal).filter(models.Deal.is_active == True).count()
     
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    # Tasks today - last 24 hours
+    last_24h = datetime.utcnow() - timedelta(hours=24)
     tasks_today = db.query(models.WorkerLog).filter(
-        models.WorkerLog.created_at >= today
+        models.WorkerLog.created_at >= last_24h
     ).count()
     
     # === RECENT ACTIVITY ===
@@ -413,6 +419,9 @@ async def get_system_dashboard(db: Session = Depends(get_db)):
 async def pause_all_workers(current_user: models.User = Depends(get_current_user)):
     """Pause all automatic jobs"""
     try:
+        # Create parent directory if not exists
+        WORKER_CONTROL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        
         if WORKER_CONTROL_FILE.exists():
             with open(WORKER_CONTROL_FILE, 'r') as f:
                 state = json.load(f)
@@ -423,10 +432,14 @@ async def pause_all_workers(current_user: models.User = Depends(get_current_user
         state['paused_at'] = datetime.utcnow().isoformat()
         state['paused_by'] = current_user.username
         
+        # Write to file
         with open(WORKER_CONTROL_FILE, 'w') as f:
             json.dump(state, f, indent=2)
         
-        return {'success': True, 'message': 'All jobs paused'}
+        # Also save to Redis for faster access
+        redis_client.set('worker:control:scheduler_enabled', 'false', ex=86400)
+        
+        return {'success': True, 'message': 'All jobs paused', 'state': state}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -435,6 +448,9 @@ async def pause_all_workers(current_user: models.User = Depends(get_current_user
 async def resume_all_workers(current_user: models.User = Depends(get_current_user)):
     """Resume all automatic jobs"""
     try:
+        # Create parent directory if not exists
+        WORKER_CONTROL_FILE.parent.mkdir(parents=True, exist_ok=True)
+        
         if WORKER_CONTROL_FILE.exists():
             with open(WORKER_CONTROL_FILE, 'r') as f:
                 state = json.load(f)
@@ -445,10 +461,14 @@ async def resume_all_workers(current_user: models.User = Depends(get_current_use
         state['resumed_at'] = datetime.utcnow().isoformat()
         state['resumed_by'] = current_user.username
         
+        # Write to file
         with open(WORKER_CONTROL_FILE, 'w') as f:
             json.dump(state, f, indent=2)
         
-        return {'success': True, 'message': 'All jobs resumed'}
+        # Also save to Redis for faster access
+        redis_client.set('worker:control:scheduler_enabled', 'true', ex=86400)
+        
+        return {'success': True, 'message': 'All jobs resumed', 'state': state}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
