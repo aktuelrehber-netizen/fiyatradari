@@ -46,7 +46,8 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
       - ./backend:/app
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    user: root
     depends_on:
       postgres:
         condition: service_healthy
