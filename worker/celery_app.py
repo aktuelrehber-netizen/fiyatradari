@@ -127,11 +127,12 @@ app.conf.update(
             'schedule': crontab(minute=0, hour=2),  # 2 AM (unchanged)
         },
         
-        # Update missing ratings via crawler - daily
+        # Update missing ratings via crawler - every 8 hours
         # NOTE: PA-API doesn't return customer reviews without special access
+        # Runs 3x daily (25 products each = 75/day) to avoid bot detection
         'update-missing-ratings': {
             'task': 'celery_tasks.update_missing_ratings',
-            'schedule': crontab(minute=0, hour=5),  # 5 AM daily
+            'schedule': crontab(minute=0, hour='*/8'),  # Every 8 hours (00:00, 08:00, 16:00)
         },
     },
 )

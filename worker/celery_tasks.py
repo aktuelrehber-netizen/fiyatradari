@@ -686,11 +686,14 @@ def update_missing_ratings() -> Dict:
     
     with get_db() as db:
         # Get products without rating that are available
+        # LIMIT reduced to 25 to avoid Amazon bot detection
+        # At 5-8s per request, 25 products = 2-3 minutes (safe)
+        # Full 743 products will be completed in ~30 days
         products_without_rating = db.query(Product).filter(
             Product.rating == None,
             Product.is_available == True,
             Product.is_active == True
-        ).order_by(Product.created_at.desc()).limit(100).all()
+        ).order_by(Product.created_at.desc()).limit(25).all()
         
         updated_count = 0
         failed_count = 0

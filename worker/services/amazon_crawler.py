@@ -32,17 +32,27 @@ class AmazonCrawler:
             'Cache-Control': 'max-age=0',
         }
         
-        # Rate limiting: 1 request per 2 seconds to be respectful
+        # Rate limiting: 5-8 seconds between requests to avoid bot detection
+        # Amazon is aggressive with bot detection, need slower crawling
         self.last_request_time = 0
-        self.min_interval = 2.0
+        self.min_interval = 5.0  # Minimum 5 seconds
+        self.max_interval = 8.0  # Maximum 8 seconds (randomized)
     
     def _wait_if_needed(self):
-        """Rate limiting"""
+        """Rate limiting with random delay to avoid pattern detection"""
+        import random
+        
         now = time.time()
         elapsed = now - self.last_request_time
-        if elapsed < self.min_interval:
-            sleep_time = self.min_interval - elapsed
+        
+        # Random delay between min and max interval
+        required_interval = random.uniform(self.min_interval, self.max_interval)
+        
+        if elapsed < required_interval:
+            sleep_time = required_interval - elapsed
+            logger.debug(f"Rate limiting: sleeping {sleep_time:.1f}s")
             time.sleep(sleep_time)
+        
         self.last_request_time = time.time()
     
     def get_product(self, asin: str) -> Optional[Dict]:
