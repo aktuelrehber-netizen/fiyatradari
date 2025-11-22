@@ -126,6 +126,13 @@ app.conf.update(
             'task': 'celery_tasks.cleanup_old_data',
             'schedule': crontab(minute=0, hour=2),  # 2 AM (unchanged)
         },
+        
+        # Update missing ratings via crawler - daily
+        # NOTE: PA-API doesn't return customer reviews without special access
+        'update-missing-ratings': {
+            'task': 'celery_tasks.update_missing_ratings',
+            'schedule': crontab(minute=0, hour=5),  # 5 AM daily
+        },
     },
 )
 

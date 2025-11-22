@@ -397,7 +397,7 @@ sudo nano /etc/nginx/sites-available/firsatradari.com
 server {
     listen 80;
     listen [::]:80;
-    server_name fiyatradari.com www.fiyatradari.com;
+    server_name firsatradari.com www.firsatradari.com;
     
     # Let's Encrypt için:
     location /.well-known/acme-challenge/ {
@@ -413,11 +413,11 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name fiyatradari.com www.fiyatradari.com;
+    server_name firsatradari.com www.firsatradari.com;
     
     # SSL certificates (Let's Encrypt sonrası)
-    ssl_certificate /etc/letsencrypt/live/fiyatradari.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/fiyatradari.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/firsatradari.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/firsatradari.com/privkey.pem;
     
     # SSL configuration
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -448,10 +448,10 @@ server {
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name api.fiyatradari.com;
+    server_name api.firsatradari.com;
     
-    ssl_certificate /etc/letsencrypt/live/fiyatradari.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/fiyatradari.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/firsatradari.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/firsatradari.com/privkey.pem;
     
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers HIGH:!aNULL:!MD5;
@@ -492,7 +492,7 @@ server {
 ### Nginx Aktif Et
 ```bash
 # Symlink oluştur:
-sudo ln -s /etc/nginx/sites-available/fiyatradari.com /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/firsatradari.com /etc/nginx/sites-enabled/
 
 # Default site'ı kaldır:
 sudo rm /etc/nginx/sites-enabled/default

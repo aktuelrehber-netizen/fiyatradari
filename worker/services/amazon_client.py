@@ -309,18 +309,6 @@ class AmazonPAAPIClient:
             
             logger.info(f"Found {len(result.items)} items (already filtered by Amazon API)")
             
-            # DEBUG: Log first item's raw attributes
-            if result.items:
-                first_item = result.items[0]
-                logger.warning(f"DEBUG_RAW_API - First item ASIN: {first_item.asin}")
-                logger.warning(f"DEBUG_RAW_API - Has customer_reviews attr: {hasattr(first_item, 'customer_reviews')}")
-                if hasattr(first_item, 'customer_reviews'):
-                    logger.warning(f"DEBUG_RAW_API - customer_reviews value: {first_item.customer_reviews}")
-                    if first_item.customer_reviews:
-                        logger.warning(f"DEBUG_RAW_API - customer_reviews attributes: {dir(first_item.customer_reviews)}")
-                else:
-                    logger.error(f"CRITICAL - Amazon API NOT returning customer_reviews for ASIN {first_item.asin}!")
-            
             # Convert to dict and apply additional client-side filters
             # (for rules not supported by API like keywords, review_count)
             product_items = []

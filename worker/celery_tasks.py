@@ -668,3 +668,65 @@ def cleanup_old_data() -> Dict:
             "logs_deleted": deleted_logs,
             "deals_expired": expired_deals
         }
+
+
+@app.task
+def update_missing_ratings() -> Dict:
+    """
+    Update ratings for products missing rating data using web crawler
+    Called daily by Celery Beat
+    
+    NOTE: Amazon PA-API doesn't return CustomerReviews data without special access.
+    This task fills the gap by crawling Amazon.com.tr for rating/review data.
+    """
+    logger.info("Starting missing ratings update via crawler")
+    
+    from services.amazon_crawler import AmazonCrawler
+    crawler = AmazonCrawler()
+    
+    with get_db() as db:
+        # Get products without rating that are available
+        products_without_rating = db.query(Product).filter(
+            Product.rating == None,
+            Product.is_available == True,
+            Product.is_active == True
+        ).order_by(Product.created_at.desc()).limit(100).all()
+        
+        updated_count = 0
+        failed_count = 0
+        
+        for product in products_without_rating:
+            try:
+                # Crawl product page
+                crawled_data = crawler.get_product(product.asin)
+                
+                if crawled_data:
+                    # Update rating and review count
+                    if crawled_data.get('rating'):
+                        product.rating = crawled_data['rating']
+                        logger.info(f"✓ ASIN {product.asin}: Updated rating to {crawled_data['rating']}")
+                    
+                    if crawled_data.get('review_count'):
+                        product.review_count = crawled_data['review_count']
+                        logger.info(f"✓ ASIN {product.asin}: Updated review_count to {crawled_data['review_count']}")
+                    
+                    product.last_checked_at = datetime.utcnow()
+                    updated_count += 1
+                else:
+                    failed_count += 1
+                    logger.warning(f"✗ ASIN {product.asin}: Crawler returned no data")
+                    
+            except Exception as e:
+                failed_count += 1
+                logger.error(f"✗ ASIN {product.asin}: Crawler error: {e}")
+                continue
+        
+        db.commit()
+        
+        logger.info(f"Missing ratings update complete: {updated_count} updated, {failed_count} failed")
+        return {
+            "status": "success",
+            "updated": updated_count,
+            "failed": failed_count,
+            "total_processed": len(products_without_rating)
+        }
