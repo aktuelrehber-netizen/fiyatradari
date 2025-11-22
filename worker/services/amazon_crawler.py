@@ -135,9 +135,22 @@ class AmazonCrawler:
         return None
     
     def _extract_price(self, soup: BeautifulSoup) -> Optional[float]:
-        """Extract current price from JSON displayPrice only"""
+        """Extract current price - PRIMARY: hidden input, FALLBACK: JSON"""
         
-        # Extract price from JSON data only
+        # PRIMARY: Extract from hidden input (user-specified selector)
+        try:
+            hidden_input = soup.select_one('input[name="items[0.base][customerVisiblePrice][amount]"]')
+            if hidden_input:
+                value = hidden_input.get('value')
+                if value:
+                    price = float(value)
+                    if price > 0:
+                        logger.info(f"✅ Found price from hidden input: {price}")
+                        return price
+        except (ValueError, AttributeError) as e:
+            logger.debug(f"Hidden input extraction failed: {e}")
+        
+        # FALLBACK: Extract price from JSON data
         try:
             json_price_div = soup.select_one('.twister-plus-buying-options-price-data')
             if json_price_div:
@@ -154,7 +167,7 @@ class AmazonCrawler:
         except (json.JSONDecodeError, KeyError, ValueError, AttributeError) as e:
             logger.debug(f"JSON extraction failed: {e}")
         
-        logger.warning("⚠️ No displayPrice found - product will be marked as out of stock")
+        logger.warning("⚠️ No price found - product will be marked as out of stock")
         return None
     
     def _parse_price(self, text: str) -> Optional[float]:
@@ -183,8 +196,17 @@ class AmazonCrawler:
             return None
     
     def _check_availability(self, soup: BeautifulSoup) -> bool:
-        """Check if product is available"""
-        # Check for out of stock indicators
+        """Check if product is available - PRIMARY: specific span, FALLBACK: price"""
+        
+        # PRIMARY: Check user-specified out-of-stock span
+        out_of_stock_span = soup.select_one('span.a-color-price.a-text-bold')
+        if out_of_stock_span:
+            text = out_of_stock_span.get_text().strip()
+            if 'Şu anda mevcut değil' in text:
+                logger.info("⚠️ Found out-of-stock indicator span")
+                return False
+        
+        # FALLBACK: Check for other out of stock indicators
         out_of_stock_indicators = [
             'Şu anda mevcut değil',
             'Currently unavailable',
@@ -231,7 +253,24 @@ class AmazonCrawler:
         return None
     
     def _extract_rating(self, soup: BeautifulSoup) -> Optional[float]:
-        """Extract product rating"""
+        """Extract product rating - PRIMARY: user-specified span, FALLBACK: standard selectors"""
+        
+        # PRIMARY: User-specified selector - aria-hidden span with rating
+        try:
+            rating_span = soup.select_one('span.a-size-small.a-color-base[aria-hidden="true"]')
+            if rating_span:
+                text = rating_span.get_text().strip()
+                # Extract number like "3,8" or "3.8"
+                match = re.search(r'(\d+[.,]\d+)', text)
+                if match:
+                    rating = float(match.group(1).replace(',', '.'))
+                    if 0 <= rating <= 5:
+                        logger.info(f"✅ Found rating from aria-hidden span: {rating}")
+                        return rating
+        except (ValueError, AttributeError) as e:
+            logger.debug(f"User-specified rating extraction failed: {e}")
+        
+        # FALLBACK: Standard selectors
         selectors = [
             'span.a-icon-alt',
             'i.a-star-small span',
@@ -247,6 +286,7 @@ class AmazonCrawler:
                     try:
                         rating = float(match.group(1).replace(',', '.'))
                         if 0 <= rating <= 5:
+                            logger.info(f"✅ Found rating from fallback: {rating}")
                             return rating
                     except ValueError:
                         pass
@@ -254,13 +294,30 @@ class AmazonCrawler:
         return None
     
     def _extract_review_count(self, soup: BeautifulSoup) -> Optional[int]:
-        """Extract review count"""
-        selectors = [
-            '#acrCustomerReviewText',
+        """Extract review count - PRIMARY: #acrCustomerReviewText with parentheses, FALLBACK: other selectors"""
+        
+        # PRIMARY: User-specified selector - #acrCustomerReviewText with (28) format
+        try:
+            review_element = soup.select_one('#acrCustomerReviewText')
+            if review_element:
+                text = review_element.get_text()
+                # Extract number from parentheses: "(28)" or "(1.234)"
+                match = re.search(r'\((\d+(?:[.,]\d+)?)\)', text)
+                if match:
+                    # Remove dots/commas used as thousands separator
+                    count_str = match.group(1).replace('.', '').replace(',', '')
+                    count = int(count_str)
+                    logger.info(f"✅ Found review count from #acrCustomerReviewText: {count}")
+                    return count
+        except (ValueError, AttributeError) as e:
+            logger.debug(f"Primary review count extraction failed: {e}")
+        
+        # FALLBACK: Other selectors
+        fallback_selectors = [
             'span.a-size-base.a-color-secondary',
         ]
         
-        for selector in selectors:
+        for selector in fallback_selectors:
             element = soup.select_one(selector)
             if element:
                 text = element.get_text()
@@ -269,7 +326,9 @@ class AmazonCrawler:
                 match = re.search(r'(\d+)', text)
                 if match:
                     try:
-                        return int(match.group(1))
+                        count = int(match.group(1))
+                        logger.info(f"✅ Found review count from fallback: {count}")
+                        return count
                     except ValueError:
                         pass
         
