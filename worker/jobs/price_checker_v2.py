@@ -128,9 +128,14 @@ class PriceChecker:
         return products
     
     def _process_batch(self, products: List[Product], db) -> Dict:
-        """Process a batch of products"""
+        """
+        🚀 Process batch of products using BATCH API (10 products per request)
+        
+        OLD: 1 request per product = slow
+        NEW: 1 request per 10 products = 10x faster!
+        """
         asins = [p.asin for p in products]
-        logger.info(f"Checking prices for batch of {len(asins)} ASINs")
+        logger.info(f"🚀 BATCH MODE: Checking prices for {len(asins)} ASINs")
         
         stats = {
             "items_processed": 0,
@@ -141,11 +146,24 @@ class PriceChecker:
         }
         
         try:
-            # Fetch current prices from Amazon
-            items = self.amazon_client.get_items(asins)
+            # Split into chunks of 10 (Amazon PA API limit)
+            chunk_size = 10
+            all_items = []
+            
+            for i in range(0, len(asins), chunk_size):
+                chunk_asins = asins[i:i + chunk_size]
+                logger.info(f"📦 Batch {i//chunk_size + 1}: Fetching {len(chunk_asins)} products in 1 API call")
+                
+                # 🚀 BATCH API CALL - Get 10 products at once!
+                chunk_items = self.amazon_client.get_products_batch(chunk_asins)
+                all_items.extend(chunk_items)
+                
+                logger.info(f"✅ Batch {i//chunk_size + 1}: Got {len(chunk_items)}/{len(chunk_asins)} products")
             
             # Create lookup dict
-            items_dict = {item['asin']: item for item in items}
+            items_dict = {item['asin']: item for item in all_items}
+            
+            logger.info(f"✅ BATCH COMPLETE: Fetched {len(all_items)}/{len(asins)} products")
             
             # Update each product
             for product in products:

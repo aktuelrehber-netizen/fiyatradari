@@ -11,6 +11,7 @@ from decimal import Decimal
 from loguru import logger
 import httpx
 from bs4 import BeautifulSoup
+from services.proxy_manager import get_proxy_manager
 
 
 class AmazonCrawler:
@@ -34,7 +35,7 @@ class AmazonCrawler:
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     ]
     
-    def __init__(self):
+    def __init__(self, use_proxies: bool = True):
         self.base_url = "https://www.amazon.com.tr"
         self._base_headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -47,6 +48,15 @@ class AmazonCrawler:
             'Sec-Fetch-Site': 'none',
             'Cache-Control': 'max-age=0',
         }
+        
+        # 🌐 Proxy support
+        self.use_proxies = use_proxies
+        self.proxy_manager = get_proxy_manager() if use_proxies else None
+        if self.proxy_manager:
+            stats = self.proxy_manager.get_stats()
+            logger.info(f"🌐 Proxy rotation enabled: {stats['available']}/{stats['total']} proxies available")
+        else:
+            logger.info("Direct connection (no proxies)")
         
         # Rate limiting: 5-8 seconds between requests to avoid bot detection
         # Amazon is aggressive with bot detection, need slower crawling
@@ -151,7 +161,7 @@ class AmazonCrawler:
     
     async def get_product_async(self, asin: str, max_retries: int = 2) -> Optional[Dict]:
         """
-        Crawl product page asynchronously with retry logic
+        Crawl product page asynchronously with retry logic and proxy rotation
         
         Args:
             asin: Amazon ASIN
@@ -163,14 +173,32 @@ class AmazonCrawler:
         url = f"{self.base_url}/dp/{asin}"
         
         for attempt in range(max_retries + 1):
+            # Get proxy for this request (rotation)
+            proxy = self.proxy_manager.get_proxy() if self.proxy_manager else None
+            
             try:
                 async with self.semaphore:  # Limit concurrent requests
                     await self._wait_if_needed_async()
                     
-                    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True, headers=self._get_random_headers()) as client:
+                    # Build client with proxy if available
+                    client_kwargs = {
+                        'timeout': 30.0,
+                        'follow_redirects': True,
+                        'headers': self._get_random_headers()
+                    }
+                    if proxy:
+                        client_kwargs['proxies'] = proxy
+                        logger.info(f"🌐 Crawling with proxy: {url} (attempt {attempt + 1}/{max_retries + 1})")
+                    else:
                         logger.info(f"Crawling: {url} (attempt {attempt + 1}/{max_retries + 1})")
+                    
+                    async with httpx.AsyncClient(**client_kwargs) as client:
                         response = await client.get(url)
                         response.raise_for_status()
+                        
+                        # Mark proxy as successful if used
+                        if proxy and self.proxy_manager:
+                            self.proxy_manager.mark_proxy_success(proxy)
                         
                         soup = BeautifulSoup(response.text, 'html.parser')
                         
@@ -200,6 +228,10 @@ class AmazonCrawler:
                         return product_data
                         
             except httpx.HTTPStatusError as e:
+                # Mark proxy as failed if used
+                if proxy and self.proxy_manager:
+                    self.proxy_manager.mark_proxy_failed(proxy)
+                
                 if e.response.status_code == 404:
                     logger.warning(f"Product not found: {asin}")
                     return None
@@ -211,6 +243,10 @@ class AmazonCrawler:
                     logger.error(f"HTTP error crawling {asin} after {max_retries} retries: {e}")
                     return None
             except Exception as e:
+                # Mark proxy as failed if used
+                if proxy and self.proxy_manager:
+                    self.proxy_manager.mark_proxy_failed(proxy)
+                
                 if attempt < max_retries:
                     backoff = 2 ** attempt
                     logger.warning(f"Error crawling {asin}, retrying in {backoff}s: {e}")

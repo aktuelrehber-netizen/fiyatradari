@@ -237,6 +237,81 @@ class AmazonPAAPIClient:
         wait=wait_exponential(multiplier=1, min=4, max=10),
         retry=retry_if_exception_type((httpx.HTTPError, Exception))
     )
+    def get_products_batch(self, asins: List[str]) -> List[Dict]:
+        """
+        🚀 BATCH API: Get up to 10 products in a single API call
+        
+        This is 10x faster than getting products one by one!
+        
+        Args:
+            asins: List of ASINs (max 10 per Amazon PA API limit)
+        
+        Returns:
+            List of product data dicts
+        """
+        if not self.enabled:
+            logger.warning("Amazon PA API not enabled, falling back to crawler")
+            return self.crawler.get_products(asins)
+        
+        # Amazon PA API limit: 10 items per request
+        if len(asins) > 10:
+            logger.warning(f"Too many ASINs ({len(asins)}), truncating to 10")
+            asins = asins[:10]
+        
+        if not asins:
+            return []
+        
+        # Rate limiting (still 1 req/sec, but now we get 10 products!)
+        self.rate_limiter.wait_if_needed()
+        
+        try:
+            logger.info(f"🚀 BATCH API: Fetching {len(asins)} products in 1 request: {asins}")
+            
+            # Use get_items() for batch retrieval
+            result = self.api.get_items(item_ids=asins)
+            
+            if not result or not hasattr(result, 'items'):
+                logger.warning(f"No items returned from batch API for ASINs: {asins}")
+                return []
+            
+            items = result.items
+            logger.info(f"✅ BATCH API: Got {len(items)}/{len(asins)} products")
+            
+            # Parse each item
+            products = []
+            for item in items:
+                try:
+                    product_data = self._parse_item(item)
+                    if product_data:
+                        products.append(product_data)
+                except Exception as e:
+                    logger.error(f"Error parsing batch item {item.asin}: {e}")
+                    continue
+            
+            # If some products failed, try crawler for those
+            if len(products) < len(asins):
+                fetched_asins = {p['asin'] for p in products}
+                missing_asins = [a for a in asins if a not in fetched_asins]
+                logger.warning(f"⚠️ {len(missing_asins)} products failed from PA API, trying crawler: {missing_asins}")
+                
+                # Fallback to crawler for missing products
+                crawler_products = self.crawler.get_products(missing_asins)
+                products.extend(crawler_products)
+            
+            logger.info(f"✅ BATCH COMPLETE: {len(products)} products fetched")
+            return products
+            
+        except Exception as e:
+            logger.error(f"Batch API error for {asins}: {e}")
+            # Fallback to crawler
+            logger.info("Falling back to crawler for all products")
+            return self.crawler.get_products(asins)
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        retry=retry_if_exception_type((httpx.HTTPError, Exception))
+    )
     def search_items_by_browse_node(
         self,
         browse_node_id: str,
