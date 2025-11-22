@@ -225,7 +225,8 @@ class SystemSetting(Base):
     value = Column(Text)
     data_type = Column(String(20), default="string")  # string, int, float, bool, json
     description = Column(Text)
-    group = Column(String(50), default="general")  # general, amazon, telegram, worker
+    group = Column(String(50), default="general")  # general, amazon, telegram, worker, proxy
+    is_secret = Column(Boolean, default=False)  # Hide value in UI (passwords, API keys)
     
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

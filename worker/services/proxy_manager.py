@@ -48,10 +48,16 @@ class ProxyManager:
         self._load_proxies()
     
     def _load_proxies(self):
-        """Load proxies from environment or config"""
+        """Load proxies from config (database or environment)"""
+        from config import config
         
-        # Option 1: Single proxy from environment
-        proxy_url = os.getenv('HTTP_PROXY') or os.getenv('HTTPS_PROXY')
+        # Check if proxy is enabled
+        if not config.PROXY_ENABLED:
+            logger.info("⚠️  Proxy disabled in config")
+            return
+        
+        # Option 1: Single proxy from config/environment
+        proxy_url = config.HTTP_PROXY or os.getenv('HTTP_PROXY') or os.getenv('HTTPS_PROXY')
         if proxy_url:
             self.proxies.append({
                 'url': proxy_url,
@@ -59,29 +65,32 @@ class ProxyManager:
                 'failures': 0,
                 'last_used': 0
             })
-            logger.info(f"✅ Loaded 1 proxy from environment")
+            logger.info(f"✅ Loaded 1 proxy from config/environment")
             return
         
-        # Option 2: Proxy list from environment (comma-separated)
-        proxy_list = os.getenv('PROXY_LIST', '')
+        # Option 2: Proxy list from config/environment (comma-separated)
+        proxy_list = config.PROXY_LIST or os.getenv('PROXY_LIST', '')
         if proxy_list:
             for proxy_url in proxy_list.split(','):
                 proxy_url = proxy_url.strip()
                 if proxy_url:
+                    # Add http:// if not present
+                    if not proxy_url.startswith('http'):
+                        proxy_url = f"http://{proxy_url}"
                     self.proxies.append({
                         'url': proxy_url,
                         'protocol': 'http',
                         'failures': 0,
                         'last_used': 0
                     })
-            logger.info(f"✅ Loaded {len(self.proxies)} proxies from PROXY_LIST")
+            logger.info(f"✅ Loaded {len(self.proxies)} proxies from config PROXY_LIST")
             return
         
-        # Option 3: Premium proxy service (örnek: Bright Data, Smartproxy)
-        proxy_host = os.getenv('PROXY_HOST')
-        proxy_port = os.getenv('PROXY_PORT')
-        proxy_user = os.getenv('PROXY_USER')
-        proxy_pass = os.getenv('PROXY_PASS')
+        # Option 3: Premium proxy service from config (örnek: Bright Data, Smartproxy)
+        proxy_host = config.PROXY_HOST or os.getenv('PROXY_HOST')
+        proxy_port = config.PROXY_PORT or os.getenv('PROXY_PORT')
+        proxy_user = config.PROXY_USER or os.getenv('PROXY_USER')
+        proxy_pass = config.PROXY_PASS or os.getenv('PROXY_PASS')
         
         if all([proxy_host, proxy_port, proxy_user, proxy_pass]):
             proxy_url = f"http://{proxy_user}:{proxy_pass}@{proxy_host}:{proxy_port}"
@@ -91,10 +100,11 @@ class ProxyManager:
                 'failures': 0,
                 'last_used': 0
             })
-            logger.info(f"✅ Loaded premium proxy: {proxy_host}:{proxy_port}")
+            logger.info(f"✅ Loaded premium proxy from config: {proxy_host}:{proxy_port}")
             return
         
         # Option 4: Free proxy list (fallback - not recommended for production)
+        logger.warning("⚠️  No proxy configured in database/environment")
         self._load_free_proxies()
     
     def _load_free_proxies(self):

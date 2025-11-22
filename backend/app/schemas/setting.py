@@ -9,6 +9,7 @@ class SystemSettingBase(BaseModel):
     data_type: str = "string"
     description: Optional[str] = None
     group: str = "general"
+    is_secret: bool = False
 
 
 class SystemSettingCreate(SystemSettingBase):

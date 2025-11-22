@@ -81,6 +81,36 @@ class Config:
     def TELEGRAM_CHANNEL_ID(self):
         return self._get_setting("telegram.channel_id", "TELEGRAM_CHANNEL_ID", "")
     
+    # Proxy Settings - read from DB or .env
+    @property
+    def PROXY_ENABLED(self):
+        value = self._get_setting("proxy.enabled", "PROXY_ENABLED", "false")
+        return value.lower() in ('true', '1', 'yes')
+    
+    @property
+    def HTTP_PROXY(self):
+        return self._get_setting("proxy.http_proxy", "HTTP_PROXY", "")
+    
+    @property
+    def PROXY_LIST(self):
+        return self._get_setting("proxy.list", "PROXY_LIST", "")
+    
+    @property
+    def PROXY_HOST(self):
+        return self._get_setting("proxy.host", "PROXY_HOST", "")
+    
+    @property
+    def PROXY_PORT(self):
+        return self._get_setting("proxy.port", "PROXY_PORT", "")
+    
+    @property
+    def PROXY_USER(self):
+        return self._get_setting("proxy.user", "PROXY_USER", "")
+    
+    @property
+    def PROXY_PASS(self):
+        return self._get_setting("proxy.pass", "PROXY_PASS", "")
+    
     # Worker Settings
     WORKER_INTERVAL_MINUTES = int(os.getenv("WORKER_INTERVAL_MINUTES", "60"))
     PRICE_CHECK_INTERVAL_HOURS = int(os.getenv("PRICE_CHECK_INTERVAL_HOURS", "6"))
