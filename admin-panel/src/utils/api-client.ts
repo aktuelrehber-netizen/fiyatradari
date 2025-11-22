@@ -397,4 +397,9 @@ export const systemAPI = {
     const response = await apiClient.get('/system/control/status')
     return response.data
   },
+  
+  restartWorkers: async () => {
+    const response = await apiClient.post('/system/workers/restart')
+    return response.data
+  },
 }

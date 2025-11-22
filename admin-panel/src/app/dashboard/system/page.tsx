@@ -126,18 +126,54 @@ export default function SystemManagementPage() {
   const handleScalePool = async (newSize: number) => {
     try {
       setActionLoading(true)
-      await systemAPI.scaleWorkerPool(newSize)
+      const result = await systemAPI.scaleWorkerPool(newSize)
       
       toast({
-        title: '✅ Pool Scaled',
-        description: `Worker pool size set to ${newSize}`
+        title: '✅ Configuration Saved',
+        description: result.message || `Pool size set to ${newSize}. Restart workers to apply.`,
+        duration: 5000
       })
       
       setPoolSize(newSize)
     } catch (error) {
       toast({
         title: '❌ Error',
-        description: 'Failed to scale worker pool',
+        description: 'Failed to save pool size',
+        variant: 'destructive'
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+  
+  // Restart workers
+  const handleRestartWorkers = async () => {
+    try {
+      setActionLoading(true)
+      const result = await systemAPI.restartWorkers()
+      
+      if (result.success) {
+        toast({
+          title: '🔄 Workers Restarting',
+          description: 'Pool size will be applied in 10-15 seconds...',
+          duration: 5000
+        })
+        
+        // Reload pool status after a delay
+        setTimeout(() => {
+          loadPoolStatus()
+        }, 15000)
+      } else {
+        toast({
+          title: '❌ Restart Failed',
+          description: result.message || 'Could not restart workers',
+          variant: 'destructive'
+        })
+      }
+    } catch (error) {
+      toast({
+        title: '❌ Error',
+        description: 'Failed to restart workers',
         variant: 'destructive'
       })
     } finally {
@@ -343,15 +379,32 @@ export default function SystemManagementPage() {
               </div>
             </div>
 
-            <Button
-              onClick={() => handleScalePool(poolSize)}
-              disabled={actionLoading}
-              className="w-full"
-              size="lg"
-            >
-              {actionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
-              Pool Size Güncelle
-            </Button>
+            <div className="space-y-2">
+              <Button
+                onClick={() => handleScalePool(poolSize)}
+                disabled={actionLoading}
+                className="w-full"
+                size="lg"
+              >
+                {actionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                Yapılandırmayı Kaydet
+              </Button>
+              
+              <Button
+                onClick={handleRestartWorkers}
+                disabled={actionLoading}
+                variant="outline"
+                className="w-full"
+                size="lg"
+              >
+                {actionLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                Worker'ları Yeniden Başlat
+              </Button>
+              
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                💡 Pool size değişiklikleri worker restart sonrası etkili olur
+              </p>
+            </div>
 
             <div className="pt-4 border-t space-y-2">
               <div className="flex justify-between text-sm">

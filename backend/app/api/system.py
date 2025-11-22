@@ -17,11 +17,14 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel
 import redis
 import json
+import logging
 from pathlib import Path
 
 from app.db.database import get_db
 from app.db import models
 from app.api.auth import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -133,35 +136,48 @@ async def scale_worker_pool(
     """
     Scale worker pool size (set concurrency level)
     Size: 1-20 concurrent tasks
+    
+    NOTE: This saves the configuration. Workers will apply it on next restart.
+    For immediate effect, restart workers after changing pool size.
     """
     if size < 1 or size > 20:
         raise HTTPException(status_code=400, detail="Size must be between 1 and 20")
     
     try:
-        from celery import Celery
-        
-        celery_app = Celery('fiyatradari')
-        celery_app.config_from_object({
-            'broker_url': 'redis://redis:6379/0',
-            'result_backend': 'redis://redis:6379/1',
-        })
-        
-        # Use autoscale to set min and max concurrency
-        # autoscale(max, min) - sets the pool size range
-        celery_app.control.autoscale(max=size, min=size)
-        
-        # Save configuration to Redis
+        # Save configuration to Redis (permanent storage)
         config = {
             'pool_size': size, 
             'updated_at': datetime.utcnow().isoformat(),
             'updated_by': current_user.username
         }
-        redis_client.set('worker:pool:config', json.dumps(config), ex=3600)
+        redis_client.set('worker:pool:config', json.dumps(config))
+        
+        # Also set a simple key for easier worker access
+        redis_client.set('worker:pool:size', str(size))
+        
+        # Try to notify workers (best effort, may not work on all pool types)
+        try:
+            from celery import Celery
+            
+            celery_app = Celery('fiyatradari')
+            celery_app.config_from_object({
+                'broker_url': 'redis://redis:6379/0',
+                'result_backend': 'redis://redis:6379/1',
+            })
+            
+            # Send pool resize - this works differently on different pool types
+            # For prefork pool, we can try pool_restart
+            celery_app.control.pool_restart()
+            
+        except Exception as e:
+            # Not critical if this fails, config is saved
+            logger.warning(f"Could not send pool restart signal: {e}")
         
         return {
             'success': True,
-            'message': f'Worker pool scaled to {size}',
-            'new_size': size
+            'message': f'Worker pool size set to {size}. Restart workers for immediate effect.',
+            'new_size': size,
+            'note': 'Configuration saved. Restart workers: docker compose restart celery_worker'
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -484,3 +500,43 @@ async def get_control_status():
             return {'scheduler_enabled': True, 'jobs': {}}
     except Exception as e:
         return {'scheduler_enabled': True, 'jobs': {}, 'error': str(e)}
+
+
+@router.post("/workers/restart")
+async def restart_workers(current_user: models.User = Depends(get_current_user)):
+    """
+    Restart celery workers to apply pool size changes
+    This executes: docker compose restart celery_worker
+    """
+    try:
+        import subprocess
+        
+        # Execute docker compose restart in the project directory
+        result = subprocess.run(
+            ['docker', 'compose', 'restart', 'celery_worker'],
+            cwd='/var/www/fiyatradari',
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            return {
+                'success': True,
+                'message': 'Workers restarting... Pool size will be applied.',
+                'output': result.stdout
+            }
+        else:
+            return {
+                'success': False,
+                'message': 'Failed to restart workers',
+                'error': result.stderr
+            }
+    except subprocess.TimeoutExpired:
+        return {
+            'success': False,
+            'message': 'Restart command timed out',
+            'error': 'Command took longer than 30 seconds'
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
