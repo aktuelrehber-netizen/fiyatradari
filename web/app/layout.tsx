@@ -13,7 +13,7 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   metadataBase: new URL('https://fiyatradari.com'),
   title: {
-    default: "Fiyat Radarı - Amazon Fırsat ve İndirim Takibi",
+    default: "Fırsat Radarı - Gerçek İndirimleri Yakalar!",
     template: "%s | Fiyat Radarı"
   },
   description: "Amazon'dan tespit edilen en iyi fırsatları keşfedin. Günlük binlerce ürün taranır, büyük indirimler anında size bildirilir. Telegram kanalımıza katılın!",
