@@ -3,6 +3,7 @@ Production-ready Amazon PA API Client
 Features: Retry logic, rate limiting, error handling, connection pooling
 """
 import time
+import re
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -294,6 +295,16 @@ class AmazonPAAPIClient:
                 item_page=page,
                 item_count=min(items_per_page, 10),
                 sort_by=sort_by if sort_by else None,
+                resources=[
+                    'ItemInfo.Title',
+                    'ItemInfo.Features',
+                    'ItemInfo.ProductInfo',
+                    'Offers.Listings.Price',
+                    'Offers.Listings.DeliveryInfo.IsPrimeEligible',
+                    'Images.Primary.Large',
+                    'CustomerReviews.StarRating',  # ← Rating için
+                    'CustomerReviews.Count'         # ← Review count için
+                ],
                 **api_filters  # Pass filters to API
             )
             
@@ -427,10 +438,32 @@ class AmazonPAAPIClient:
             rating = None
             review_count = None
             if hasattr(item, 'customer_reviews') and item.customer_reviews:
-                if hasattr(item.customer_reviews, 'star_rating'):
-                    rating = float(item.customer_reviews.star_rating.value) if item.customer_reviews.star_rating else None
+                # Parse star rating (format: "4.5 out of 5 stars" or float)
+                if hasattr(item.customer_reviews, 'star_rating') and item.customer_reviews.star_rating:
+                    try:
+                        if hasattr(item.customer_reviews.star_rating, 'value'):
+                            # If it has .value attribute, use it
+                            rating_str = str(item.customer_reviews.star_rating.value)
+                        else:
+                            # Otherwise use the object directly
+                            rating_str = str(item.customer_reviews.star_rating)
+                        
+                        # Extract number from string (e.g., "4.5 out of 5 stars" -> 4.5)
+                        match = re.search(r'(\d+\.?\d*)', rating_str)
+                        if match:
+                            rating = float(match.group(1))
+                            logger.debug(f"ASIN {item.asin}: Parsed rating {rating} from '{rating_str}'")
+                    except (ValueError, AttributeError) as e:
+                        logger.warning(f"ASIN {item.asin}: Failed to parse rating: {e}")
+                
+                # Parse review count
                 if hasattr(item.customer_reviews, 'count'):
-                    review_count = int(item.customer_reviews.count) if item.customer_reviews.count else None
+                    try:
+                        review_count = int(item.customer_reviews.count) if item.customer_reviews.count else None
+                        if review_count:
+                            logger.debug(f"ASIN {item.asin}: Found {review_count} reviews")
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"ASIN {item.asin}: Failed to parse review count: {e}")
             
             # Extract image
             image_url = None
