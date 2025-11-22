@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { healthAPI } from '@/utils/api-client'
-import { Package, Zap, FolderTree, Send, TrendingUp, Activity, TrendingDown, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react'
+import { Package, Zap, FolderTree, Send, TrendingUp, TrendingDown } from 'lucide-react'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 interface DashboardStats {
@@ -126,13 +126,6 @@ export default function DashboardPage() {
       bgColor: 'bg-orange-100',
     },
     {
-      title: 'Bugünkü Fiyat Kontrolleri',
-      value: stats?.total_price_checks_today || 0,
-      icon: RefreshCw,
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-100',
-    },
-    {
       title: 'Bugün Fiyatı Değişenler',
       value: stats?.price_changes_today || 0,
       icon: TrendingDown,
@@ -177,35 +170,6 @@ export default function DashboardPage() {
           )
         })}
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Sistem Durumu</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Sistem Sağlığı</span>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                stats?.system_health === 'healthy' 
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-yellow-100 text-yellow-800'
-              }`}>
-                {stats?.system_health === 'healthy' ? 'Sağlıklı' : 'Uyarı'}
-              </span>
-            </div>
-            
-            {stats?.last_worker_run && (
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Son Worker Çalışması</span>
-                <span className="text-sm text-gray-600">
-                  {new Date(stats.last_worker_run).toLocaleString('tr-TR')}
-                </span>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Charts Section */}
       <div className="grid gap-6 md:grid-cols-2">
@@ -341,56 +305,34 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Hızlı İşlemler</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <a
-              href="/dashboard/categories"
-              className="block p-3 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <div className="font-medium">Yeni Kategori Ekle</div>
-              <div className="text-sm text-gray-500">Amazon kategorilerini takip edin</div>
-            </a>
-            <a
-              href="/dashboard/products"
-              className="block p-3 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <div className="font-medium">Ürünleri Görüntüle</div>
-              <div className="text-sm text-gray-500">Takip edilen ürünleri yönetin</div>
-            </a>
-            <a
-              href="/dashboard/deals"
-              className="block p-3 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <div className="font-medium">Fırsatları Yönet</div>
-              <div className="text-sm text-gray-500">İndirimleri inceleyin ve yayınlayın</div>
-            </a>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Sistem Bilgileri</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <div className="text-sm text-gray-500">API Durumu</div>
-              <div className="font-medium text-green-600">Çalışıyor</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-500">Database</div>
-              <div className="font-medium text-green-600">Bağlı</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-500">Worker</div>
-              <div className="font-medium text-green-600">Aktif</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Hızlı İşlemler</CardTitle>
+        </CardHeader>
+        <CardContent className="grid md:grid-cols-3 gap-3">
+          <a
+            href="/dashboard/categories"
+            className="block p-4 rounded-lg border hover:bg-gray-50 transition-colors"
+          >
+            <div className="font-medium">Yeni Kategori Ekle</div>
+            <div className="text-sm text-gray-500 mt-1">Amazon kategorilerini takip edin</div>
+          </a>
+          <a
+            href="/dashboard/products"
+            className="block p-4 rounded-lg border hover:bg-gray-50 transition-colors"
+          >
+            <div className="font-medium">Ürünleri Görüntüle</div>
+            <div className="text-sm text-gray-500 mt-1">Takip edilen ürünleri yönetin</div>
+          </a>
+          <a
+            href="/dashboard/deals"
+            className="block p-4 rounded-lg border hover:bg-gray-50 transition-colors"
+          >
+            <div className="font-medium">Fırsatları Yönet</div>
+            <div className="text-sm text-gray-500 mt-1">İndirimleri inceleyin ve yayınlayın</div>
+          </a>
+        </CardContent>
+      </Card>
     </div>
   )
 }
