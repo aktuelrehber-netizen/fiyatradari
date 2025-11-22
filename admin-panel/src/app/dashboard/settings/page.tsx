@@ -151,16 +151,6 @@ export default function SettingsPage() {
       <TelegramTemplateEditor onSave={() => {
         loadSettings()
       }} />
-
-      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <p className="text-sm text-blue-900">
-          <strong>💡 Not:</strong> Worker ayarları ve Cache yönetimi artık{' '}
-          <a href="/dashboard/system" className="underline font-semibold">
-            Sistem Yönetimi
-          </a>{' '}
-          sayfasında bulunmaktadır.
-        </p>
-      </div>
     </div>
   )
 }
