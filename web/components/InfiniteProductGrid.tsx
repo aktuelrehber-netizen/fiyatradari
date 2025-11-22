@@ -161,20 +161,24 @@ export default function InfiniteProductGrid({
                   {product.title}
                 </h3>
 
-                {/* Rating */}
-                {product.rating && (
-                  <div className="flex items-center gap-1.5 mb-2 text-xs">
-                    <div className="flex items-center">
-                      <span className="text-yellow-500">★</span>
-                      <span className="ml-0.5 font-medium">{product.rating}</span>
-                    </div>
-                    {product.review_count && (
-                      <span className="text-gray-500">
-                        ({product.review_count})
-                      </span>
-                    )}
-                  </div>
-                )}
+                {/* Rating - Always show section */}
+                <div className="flex items-center gap-1.5 mb-2 text-xs min-h-[20px]">
+                  {product.rating && product.rating > 0 ? (
+                    <>
+                      <div className="flex items-center">
+                        <span className="text-yellow-500">★</span>
+                        <span className="ml-0.5 font-medium">{product.rating.toFixed(1)}</span>
+                      </div>
+                      {product.review_count && product.review_count > 0 && (
+                        <span className="text-gray-500">
+                          ({product.review_count.toLocaleString('tr-TR')})
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-gray-400 text-xs">Henüz değerlendirilmemiş</span>
+                  )}
+                </div>
 
                 {/* Prices */}
                 <div className="mb-3">
