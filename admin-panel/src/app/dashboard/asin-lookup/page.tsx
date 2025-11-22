@@ -669,18 +669,42 @@ export default function ASINLookupPage() {
                       </p>
                     </div>
 
-                    {product.rating && (
-                      <div>
-                        <span className="text-gray-500">Değerlendirme:</span>
-                        <p className="flex items-center gap-1 mt-1">
-                          <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                          <span className="font-semibold">{product.rating.toFixed(1)}</span>
-                          {product.review_count && (
-                            <span className="text-gray-500 text-xs">({product.review_count})</span>
-                          )}
-                        </p>
+                    {/* Rating & Reviews - DEBUG SECTION */}
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Star className="h-4 w-4 text-yellow-600" />
+                        <span className="font-semibold text-yellow-900">Customer Reviews (DEBUG)</span>
                       </div>
-                    )}
+                      
+                      {product.rating ? (
+                        <div className="space-y-1">
+                          <p className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">Rating:</span>
+                            <span className="font-bold text-lg text-yellow-600">{product.rating.toFixed(1)}</span>
+                            <span className="text-xs text-green-600 font-semibold">✓ API'den geldi</span>
+                          </p>
+                          <p className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">Review Count:</span>
+                            <span className="font-bold text-lg">{product.review_count?.toLocaleString('tr-TR') || 0}</span>
+                            {product.review_count ? (
+                              <span className="text-xs text-green-600 font-semibold">✓ API'den geldi</span>
+                            ) : (
+                              <span className="text-xs text-orange-600 font-semibold">⚠ API'den gelmedi</span>
+                            )}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="bg-red-50 border border-red-200 rounded p-2">
+                          <p className="text-red-700 font-semibold text-sm flex items-center gap-2">
+                            <XCircle className="h-4 w-4" />
+                            ❌ Rating API'den GELMEDİ!
+                          </p>
+                          <p className="text-xs text-red-600 mt-1">
+                            Amazon PA-API customer_reviews döndürmüyor olabilir.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="pt-4 border-t flex gap-2">
