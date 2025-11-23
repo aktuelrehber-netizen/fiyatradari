@@ -49,6 +49,10 @@ class AmazonCrawler:
             'Cache-Control': 'max-age=0',
         }
         
+        # Amazon partner tag for affiliate tracking
+        from config import config
+        self.partner_tag = config.AMAZON_PARTNER_TAG
+        
         # 🌐 Proxy support
         self.use_proxies = use_proxies
         self.proxy_manager = get_proxy_manager() if use_proxies else None
@@ -115,6 +119,11 @@ class AmazonCrawler:
         
         url = f"{self.base_url}/dp/{asin}"
         
+        # Add partner tag for affiliate tracking
+        detail_url = url
+        if self.partner_tag:
+            detail_url = f"{url}?tag={self.partner_tag}"
+        
         try:
             with httpx.Client(timeout=30.0, follow_redirects=True, headers=self._get_random_headers()) as client:
                 logger.info(f"Crawling: {url}")
@@ -137,7 +146,7 @@ class AmazonCrawler:
                     'image_url': self._extract_image(soup),
                     'rating': self._extract_rating(soup),
                     'review_count': self._extract_review_count(soup),
-                    'detail_page_url': url,
+                    'detail_page_url': detail_url,
                     'source': 'crawler'  # Mark as crawled data
                 }
                 
@@ -171,6 +180,11 @@ class AmazonCrawler:
             Product data dict or None if failed
         """
         url = f"{self.base_url}/dp/{asin}"
+        
+        # Add partner tag for affiliate tracking
+        detail_url = url
+        if self.partner_tag:
+            detail_url = f"{url}?tag={self.partner_tag}"
         
         for attempt in range(max_retries + 1):
             # Get proxy for this request (rotation)
@@ -215,7 +229,7 @@ class AmazonCrawler:
                             'image_url': self._extract_image(soup),
                             'rating': self._extract_rating(soup),
                             'review_count': self._extract_review_count(soup),
-                            'detail_page_url': url,
+                            'detail_page_url': detail_url,
                             'source': 'crawler'
                         }
                         

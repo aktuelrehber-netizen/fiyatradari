@@ -584,6 +584,12 @@ class AmazonPAAPIClient:
                         if hasattr(external_ids.is_bns, 'display_values') and external_ids.is_bns.display_values:
                             isbn = external_ids.is_bns.display_values[0] if len(external_ids.is_bns.display_values) > 0 else None
             
+            # Add partner tag to URL for affiliate tracking
+            detail_url = item.detail_page_url
+            if self.partner_tag and detail_url and 'tag=' not in detail_url:
+                separator = '&' if '?' in detail_url else '?'
+                detail_url = f"{detail_url}{separator}tag={self.partner_tag}"
+            
             return {
                 'asin': item.asin,
                 'title': title or '',
@@ -591,7 +597,7 @@ class AmazonPAAPIClient:
                 'current_price': price,  # Only real price, no fake list_price
                 'currency': 'TRY',
                 'image_url': image_url,
-                'detail_page_url': item.detail_page_url,
+                'detail_page_url': detail_url,
                 'rating': rating,
                 'review_count': review_count,
                 'is_available': availability != 'Out of Stock' if availability else True,

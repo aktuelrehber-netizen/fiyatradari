@@ -51,6 +51,10 @@ class PlaywrightCrawler:
         self.use_proxies = use_proxies
         self.proxy_manager = get_proxy_manager() if use_proxies else None
         
+        # Amazon partner tag for affiliate tracking
+        from config import config
+        self.partner_tag = config.AMAZON_PARTNER_TAG
+        
         # Browser instances (lazy init)
         self._playwright = None
         self._browser: Optional[Browser] = None
@@ -163,6 +167,11 @@ class PlaywrightCrawler:
         
         url = f"{self.base_url}/dp/{asin}"
         
+        # Add partner tag for affiliate tracking
+        detail_url = url
+        if self.partner_tag:
+            detail_url = f"{url}?tag={self.partner_tag}"
+        
         for attempt in range(max_retries + 1):
             page: Optional[Page] = None
             try:
@@ -173,8 +182,8 @@ class PlaywrightCrawler:
                 # Random delay before navigation (human-like)
                 await asyncio.sleep(random.uniform(1, 2))
                 
-                # Navigate to page
-                response = await page.goto(url, wait_until='networkidle', timeout=30000)
+                # Navigate to product page
+                response = await page.goto(detail_url, wait_until='networkidle', timeout=30000)
                 
                 if response.status == 404:
                     logger.warning(f"Product not found: {asin}")
@@ -198,7 +207,7 @@ class PlaywrightCrawler:
                 await asyncio.sleep(random.uniform(0.3, 0.7))
                 
                 # Extract product data
-                product_data = await self._extract_product_data(page, asin, url)
+                product_data = await self._extract_product_data(page, asin, detail_url)
                 
                 await page.close()
                 
