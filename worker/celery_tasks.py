@@ -79,7 +79,9 @@ def check_product_price(self, product_id: int, priority: int = 5) -> Dict:
         Result dict with status and metrics
     """
     try:
-        amazon_client = AmazonPAAPIClient()
+        import asyncio
+        from services.amazon_crawler import AmazonCrawler
+        
         deal_detector = DealDetector(deal_threshold_percentage=config.DEAL_THRESHOLD_PERCENTAGE)
         
         with get_db() as db:
@@ -89,16 +91,20 @@ def check_product_price(self, product_id: int, priority: int = 5) -> Dict:
                 logger.warning(f"Product {product_id} not found")
                 return {"status": "not_found", "product_id": product_id}
             
-            # Fetch current price from Amazon
-            items = amazon_client.get_items([product.asin])
-            if not items:
+            # Fetch current price from Amazon using crawler
+            crawler = AmazonCrawler(use_proxies=True)
+            
+            async def crawl():
+                return await crawler.get_product_async(product.asin)
+            
+            item_data = asyncio.run(crawl())
+            
+            if not item_data:
                 logger.warning(f"No data from Amazon for {product.asin}")
                 product.last_checked_at = datetime.utcnow()
                 product.check_count = (product.check_count or 0) + 1
                 db.commit()
                 return {"status": "no_data", "product_id": product_id, "asin": product.asin}
-            
-            item_data = items[0]
             old_price = product.current_price
             new_price = Decimal(str(item_data['current_price'])) if item_data.get('current_price') else None
             
@@ -109,8 +115,10 @@ def check_product_price(self, product_id: int, priority: int = 5) -> Dict:
                 db.commit()
                 return {"status": "unavailable", "product_id": product_id, "asin": product.asin}
             
-            # Update product
+            # Update product (including rating and review_count from crawler)
             product.current_price = new_price
+            product.rating = item_data.get('rating', product.rating)
+            product.review_count = item_data.get('review_count', product.review_count)
             product.is_available = item_data.get('is_available', True)
             product.last_checked_at = datetime.utcnow()
             product.check_count = (product.check_count or 0) + 1
