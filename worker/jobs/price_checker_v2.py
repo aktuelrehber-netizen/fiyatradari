@@ -129,13 +129,15 @@ class PriceChecker:
     
     def _process_batch(self, products: List[Product], db) -> Dict:
         """
-        🚀 Process batch of products using BATCH API (10 products per request)
+        🚀 CRAWLER MODE: Process products using web crawler (no API rate limits!)
         
-        OLD: 1 request per product = slow
-        NEW: 1 request per 10 products = 10x faster!
+        Benefits:
+        - No API rate limit
+        - Parallel crawling (20+ concurrent)
+        - Updates rating & review count
         """
         asins = [p.asin for p in products]
-        logger.info(f"🚀 BATCH MODE: Checking prices for {len(asins)} ASINs")
+        logger.info(f"🕷️ CRAWLER MODE: Checking prices for {len(asins)} ASINs via web scraping")
         
         stats = {
             "items_processed": 0,
@@ -146,22 +148,25 @@ class PriceChecker:
         }
         
         try:
-            # Split into chunks of 10 (Amazon PA API limit)
-            chunk_size = 10
-            all_items = []
+            # Use crawler for price updates
+            import asyncio
+            from services.amazon_crawler import AmazonCrawler
             
-            for i in range(0, len(asins), chunk_size):
-                chunk_asins = asins[i:i + chunk_size]
-                logger.info(f"📦 Batch {i//chunk_size + 1}: Fetching {len(chunk_asins)} products in 1 API call")
-                
-                # 🚀 BATCH API CALL - Get 10 products at once!
-                chunk_items = self.amazon_client.get_products_batch(chunk_asins)
-                all_items.extend(chunk_items)
-                
-                logger.info(f"✅ Batch {i//chunk_size + 1}: Got {len(chunk_items)}/{len(chunk_asins)} products")
+            crawler = AmazonCrawler(use_proxies=True)
+            
+            # Crawl all products asynchronously
+            async def crawl_all():
+                tasks = [crawler.get_product_async(asin) for asin in asins]
+                return await asyncio.gather(*tasks, return_exceptions=True)
+            
+            all_items = asyncio.run(crawl_all())
+            
+            # Filter out exceptions and None values
+            valid_items = [item for item in all_items if item and not isinstance(item, Exception)]
+            logger.info(f"✅ Crawled {len(valid_items)}/{len(asins)} products successfully")
             
             # Create lookup dict
-            items_dict = {item['asin']: item for item in all_items}
+            items_dict = {item['asin']: item for item in valid_items}
             
             logger.info(f"✅ BATCH COMPLETE: Fetched {len(all_items)}/{len(asins)} products")
             
