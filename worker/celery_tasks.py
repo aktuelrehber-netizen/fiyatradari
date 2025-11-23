@@ -115,7 +115,7 @@ def check_product_price(self, product_id: int, priority: int = 5) -> Dict:
                 db.commit()
                 return {"status": "unavailable", "product_id": product_id, "asin": product.asin}
             
-            # Update product (including rating and review_count from crawler-burasi)
+            # (Update product (including rating and review_count from crawler-burasi)
             product.current_price = new_price
             product.rating = item_data.get('rating', product.rating)
             product.review_count = item_data.get('review_count', product.review_count)
