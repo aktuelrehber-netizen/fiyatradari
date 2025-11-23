@@ -94,7 +94,9 @@ class ProxyManager:
         # Option 1: Single proxy from config/environment
         proxy_url = config.HTTP_PROXY or os.getenv('HTTP_PROXY') or os.getenv('HTTPS_PROXY')
         if proxy_url:
+            logger.info(f"📝 Original proxy: {proxy_url}")
             proxy_url = self._normalize_proxy_url(proxy_url)
+            logger.info(f"✨ Normalized proxy: {proxy_url}")
             if proxy_url:
                 self.proxies.append({
                     'url': proxy_url,
@@ -102,7 +104,7 @@ class ProxyManager:
                     'failures': 0,
                     'last_used': 0
                 })
-                logger.info(f"✅ Loaded 1 proxy from config/environment")
+                logger.info(f"✅ Loaded 1 proxy from config/environment: {proxy_url}")
             return
         
         # Option 2: Proxy list from config/environment (comma-separated)
