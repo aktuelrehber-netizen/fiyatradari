@@ -47,6 +47,41 @@ class ProxyManager:
         # Load proxies from config
         self._load_proxies()
     
+    def _normalize_proxy_url(self, proxy_str: str) -> Optional[str]:
+        """
+        Normalize proxy URL to standard format
+        
+        Supports multiple formats:
+        1. Standard: http://user:pass@host:port
+        2. No scheme: user:pass@host:port -> http://user:pass@host:port
+        3. Colon format: host:port:user:pass -> http://user:pass@host:port
+        4. Simple: host:port -> http://host:port
+        """
+        proxy_str = proxy_str.strip()
+        if not proxy_str:
+            return None
+        
+        # Already has scheme
+        if proxy_str.startswith('http://') or proxy_str.startswith('https://') or proxy_str.startswith('socks'):
+            return proxy_str
+        
+        # Parse colon-separated format: host:port:user:pass
+        parts = proxy_str.split(':')
+        if len(parts) == 4:
+            host, port, user, password = parts
+            return f"http://{user}:{password}@{host}:{port}"
+        
+        # Parse auth format: user:pass@host:port
+        if '@' in proxy_str:
+            return f"http://{proxy_str}"
+        
+        # Simple format: host:port
+        if len(parts) == 2:
+            return f"http://{proxy_str}"
+        
+        logger.warning(f"⚠️  Could not parse proxy format: {proxy_str}")
+        return None
+    
     def _load_proxies(self):
         """Load proxies from config (database or environment)"""
         from config import config
@@ -59,13 +94,15 @@ class ProxyManager:
         # Option 1: Single proxy from config/environment
         proxy_url = config.HTTP_PROXY or os.getenv('HTTP_PROXY') or os.getenv('HTTPS_PROXY')
         if proxy_url:
-            self.proxies.append({
-                'url': proxy_url,
-                'protocol': 'http',
-                'failures': 0,
-                'last_used': 0
-            })
-            logger.info(f"✅ Loaded 1 proxy from config/environment")
+            proxy_url = self._normalize_proxy_url(proxy_url)
+            if proxy_url:
+                self.proxies.append({
+                    'url': proxy_url,
+                    'protocol': 'http',
+                    'failures': 0,
+                    'last_used': 0
+                })
+                logger.info(f"✅ Loaded 1 proxy from config/environment")
             return
         
         # Option 2: Proxy list from config/environment (comma-separated)
@@ -74,15 +111,15 @@ class ProxyManager:
             for proxy_url in proxy_list.split(','):
                 proxy_url = proxy_url.strip()
                 if proxy_url:
-                    # Add http:// if not present
-                    if not proxy_url.startswith('http'):
-                        proxy_url = f"http://{proxy_url}"
-                    self.proxies.append({
-                        'url': proxy_url,
-                        'protocol': 'http',
-                        'failures': 0,
-                        'last_used': 0
-                    })
+                    # Parse and normalize proxy URL
+                    proxy_url = self._normalize_proxy_url(proxy_url)
+                    if proxy_url:
+                        self.proxies.append({
+                            'url': proxy_url,
+                            'protocol': 'http',
+                            'failures': 0,
+                            'last_used': 0
+                        })
             logger.info(f"✅ Loaded {len(self.proxies)} proxies from config PROXY_LIST")
             return
         
