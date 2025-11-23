@@ -77,30 +77,30 @@ app.conf.update(
               queue_arguments={'x-max-priority': 3}),
     ),
     
-    # Beat schedule (periodic tasks) - AGGRESSIVE SCHEDULING
+    # Beat schedule (periodic tasks) - ULTRA AGGRESSIVE SCHEDULING (CRAWLER MODE)
     beat_schedule={
-        # Continuous queue refill - every 3 minutes (KEEPS WORKERS BUSY!)
+        # Continuous queue refill - every 1 minute (MAXIMUM THROUGHPUT!)
         'continuous-queue-refill': {
             'task': 'celery_tasks.continuous_queue_refill',
-            'schedule': crontab(minute='*/3'),  # Every 3 minutes (was 5)
+            'schedule': crontab(minute='*/1'),  # Every 1 minute (was 3)
         },
         
-        # High priority products - every 30 minutes
+        # High priority products - every 10 minutes (REAL-TIME DEALS!)
         'check-high-priority-products': {
             'task': 'celery_tasks.schedule_high_priority_checks',
-            'schedule': crontab(minute='*/30'),  # Every 30 minutes (was 1 hour)
+            'schedule': crontab(minute='*/10'),  # Every 10 minutes (was 30)
         },
         
-        # Medium priority products - every 3 hours
+        # Medium priority products - every 1 hour (FAST TRACKING)
         'check-medium-priority-products': {
             'task': 'celery_tasks.schedule_medium_priority_checks',
-            'schedule': crontab(minute=0, hour='*/3'),  # Every 3 hours (was 6)
+            'schedule': crontab(minute=0, hour='*/1'),  # Every 1 hour (was 3)
         },
         
-        # Low priority products - every 12 hours
+        # Low priority products - every 6 hours (2X FASTER)
         'check-low-priority-products': {
             'task': 'celery_tasks.schedule_low_priority_checks',
-            'schedule': crontab(minute=0, hour='*/12'),  # Every 12 hours (was 24)
+            'schedule': crontab(minute=0, hour='*/6'),  # Every 6 hours (was 12)
         },
         
         # Fetch new products - daily
@@ -109,16 +109,16 @@ app.conf.update(
             'schedule': crontab(minute=0, hour=4),  # 4 AM (unchanged)
         },
         
-        # Send notifications - every 15 minutes
+        # Send notifications - every 5 minutes (INSTANT ALERTS!)
         'send-notifications': {
             'task': 'celery_tasks.schedule_notifications',
-            'schedule': crontab(minute='*/15'),  # Every 15 minutes (was 30)
+            'schedule': crontab(minute='*/5'),  # Every 5 minutes (was 15)
         },
         
-        # Update priorities - every 2 hours
+        # Update priorities - every 30 minutes (DYNAMIC ADJUSTMENT)
         'update-product-priorities': {
             'task': 'celery_tasks.update_product_priorities',
-            'schedule': crontab(minute=0, hour='*/2'),  # Every 2 hours (was 4)
+            'schedule': crontab(minute='*/30'),  # Every 30 minutes (was 2 hours)
         },
         
         # Cleanup old data - daily
