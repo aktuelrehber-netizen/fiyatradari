@@ -62,12 +62,23 @@ class AmazonCrawler:
         else:
             logger.info("Direct connection (no proxies)")
         
-        # Rate limiting: 5-8 seconds between requests to avoid bot detection
-        # Amazon is aggressive with bot detection, need slower crawling
+        # Rate limiting: Adjusted based on proxy availability
+        # With proxies: More aggressive crawling is safe
+        # Without proxies: Conservative to avoid bot detection
         self.last_request_time = 0
-        self.min_interval = 5.0  # Minimum 5 seconds
-        self.max_interval = 8.0  # Maximum 8 seconds (randomized)
-        self.semaphore = asyncio.Semaphore(2)  # Max 2 concurrent requests
+        
+        if self.proxy_manager and self.proxy_manager.get_stats()['available'] > 0:
+            # WITH PROXIES: Faster crawling (distributed IPs)
+            self.min_interval = 1.0  # 1-2 seconds
+            self.max_interval = 2.0
+            self.semaphore = asyncio.Semaphore(5)  # Max 5 concurrent (10 workers × 5 = 50 total)
+            logger.info("🚀 Aggressive crawling mode: 5 concurrent per worker (50 total)")
+        else:
+            # WITHOUT PROXIES: Conservative crawling
+            self.min_interval = 5.0  # 5-8 seconds
+            self.max_interval = 8.0
+            self.semaphore = asyncio.Semaphore(2)  # Max 2 concurrent (10 workers × 2 = 20 total)
+            logger.info("🐌 Conservative crawling mode: 2 concurrent per worker (20 total)")
     
     def _get_random_headers(self) -> dict:
         """Get headers with random User-Agent"""
