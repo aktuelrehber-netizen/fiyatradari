@@ -42,7 +42,7 @@ services:
       - AMAZON_MARKETPLACE=${AMAZON_MARKETPLACE:-www.amazon.com.tr}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHANNEL_ID=${TELEGRAM_CHANNEL_ID}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://firsatradari.com,https://www.firsatradari.com,https://admin.firsatradari.com,http://localhost:3000,http://localhost:3001}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
@@ -126,7 +126,7 @@ services:
       context: ./admin-panel
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_API_URL: https://api.firsatradari.com
         NODE_ENV: production
     container_name: fiyatradari_admin
     ports:
@@ -134,7 +134,7 @@ services:
     environment:
       - TZ=Europe/Istanbul
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=https://api.firsatradari.com
       - PORT=3001
     depends_on:
       - backend
