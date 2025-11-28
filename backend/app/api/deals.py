@@ -86,6 +86,9 @@ async def list_deals(
                     else f"https://www.amazon.com.tr/dp/{product.asin}" if product and product.asin else None,
                 "brand": product.brand if product else None,
                 "asin": product.asin if product else None,
+                "rating": float(product.rating) if product and product.rating else None,
+                "review_count": product.review_count if product else None,
+                "category_id": product.category_id if product else None,
             } if product else None
         }
         items.append(deal_dict)

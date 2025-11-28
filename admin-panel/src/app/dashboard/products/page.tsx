@@ -7,8 +7,12 @@ import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { productsAPI } from '@/utils/api-client'
-import { Search, Eye, Edit, Trash2, ExternalLink, RefreshCw, Filter, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { productsAPI, categoriesAPI } from '@/utils/api-client'
+import { formatTurkishPrice } from '@/utils/format'
+import { Search, Eye, Edit, Trash2, ExternalLink, RefreshCw, Filter, ToggleLeft, ToggleRight, X, Check, ChevronsUpDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { PaginationControls } from '@/components/pagination-controls'
 import { useToast } from '@/hooks/use-toast'
 import { ProductViewModal } from '@/components/modals/product-view-modal'
@@ -29,6 +33,13 @@ interface Product {
   rating: number
   review_count: number
   last_checked_at: string
+  category_id: number
+}
+
+interface Category {
+  id: number
+  name: string
+  amazon_node_id: string
 }
 
 export default function ProductsPage() {
@@ -41,12 +52,30 @@ export default function ProductsPage() {
   const [perPage, setPerPage] = useState(50)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [availabilityFilter, setAvailabilityFilter] = useState<string>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [categories, setCategories] = useState<Category[]>([])
+  const [categoryOpen, setCategoryOpen] = useState(false)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null)
 
+  const AMAZON_PARTNER_TAG = 'firsatradar06-21'
+
+  useEffect(() => {
+    loadCategories()
+  }, [])
+
   useEffect(() => {
     loadProducts(currentPage)
-  }, [statusFilter, availabilityFilter, perPage])
+  }, [statusFilter, availabilityFilter, categoryFilter, perPage])
+
+  const loadCategories = async () => {
+    try {
+      const data = await categoriesAPI.list()
+      setCategories(data)
+    } catch (error) {
+      console.error('Failed to load categories:', error)
+    }
+  }
 
   const loadProducts = async (page: number = 1) => {
     setLoading(true)
@@ -66,6 +95,10 @@ export default function ProductsPage() {
       
       if (availabilityFilter !== 'all') {
         params.is_available = availabilityFilter === 'available'
+      }
+      
+      if (categoryFilter !== 'all') {
+        params.category_id = parseInt(categoryFilter)
       }
       
       const data = await productsAPI.list(params)
@@ -223,6 +256,84 @@ export default function ProductsPage() {
                 </SelectContent>
               </Select>
               
+              <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={categoryOpen}
+                    className="w-[200px] justify-between"
+                  >
+                    {categoryFilter === 'all'
+                      ? 'Kategori Seç...'
+                      : categories.find((cat) => cat.id.toString() === categoryFilter)?.name || 'Kategori Seç...'}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Kategori ara..." />
+                    <CommandList>
+                      <CommandEmpty>Kategori bulunamadı.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="all"
+                          onSelect={() => {
+                            setCategoryFilter('all')
+                            setCategoryOpen(false)
+                            handleFilterChange()
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 h-4 w-4',
+                              categoryFilter === 'all' ? 'opacity-100' : 'opacity-0'
+                            )}
+                          />
+                          Tüm Kategoriler
+                        </CommandItem>
+                        {categories.map((cat) => (
+                          <CommandItem
+                            key={cat.id}
+                            value={cat.name}
+                            onSelect={() => {
+                              setCategoryFilter(cat.id.toString())
+                              setCategoryOpen(false)
+                              handleFilterChange()
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                categoryFilter === cat.id.toString() ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            {cat.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              
+              {(statusFilter !== 'all' || availabilityFilter !== 'all' || categoryFilter !== 'all') && (
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    setStatusFilter('all')
+                    setAvailabilityFilter('all')
+                    setCategoryFilter('all')
+                    handleFilterChange()
+                  }}
+                  className="h-9"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Filtreleri Temizle
+                </Button>
+              )}
+              
               <Select value={perPage.toString()} onValueChange={(v) => setPerPage(parseInt(v))}>
                 <SelectTrigger className="w-[120px]">
                   <SelectValue />
@@ -294,11 +405,11 @@ export default function ProductsPage() {
                     <TableCell className="font-mono text-xs py-2">{product.asin}</TableCell>
                     <TableCell className="text-right py-2">
                       <div className="text-xs font-semibold whitespace-nowrap">
-                        {parseFloat(product.current_price).toFixed(2)} {product.currency === 'TRY' ? '₺' : product.currency}
+                        {formatTurkishPrice(parseFloat(product.current_price))} ₺
                       </div>
                       {product.list_price && parseFloat(product.list_price) > parseFloat(product.current_price) && (
                         <div className="text-xs text-gray-500 line-through whitespace-nowrap">
-                          {parseFloat(product.list_price).toFixed(2)} {product.currency === 'TRY' ? '₺' : product.currency}
+                          {formatTurkishPrice(parseFloat(product.list_price))} ₺
                         </div>
                       )}
                     </TableCell>
@@ -327,13 +438,16 @@ export default function ProductsPage() {
                             <ToggleLeft className="h-3.5 w-3.5 text-gray-400" />
                           )}
                         </Button>
-                        {product.detail_page_url && (
-                          <a href={product.detail_page_url} target="_blank" rel="noopener noreferrer">
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Button>
-                          </a>
-                        )}
+                        <a 
+                          href={product.detail_page_url || `https://www.amazon.com.tr/dp/${product.asin}?tag=${AMAZON_PARTNER_TAG}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          title="Amazon'da Görüntüle"
+                        >
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Button>
+                        </a>
                         <Button 
                           variant="ghost" 
                           size="sm"

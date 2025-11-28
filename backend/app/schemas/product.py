@@ -18,6 +18,7 @@ class ProductBase(BaseModel):
     availability: Optional[str] = None
     rating: Optional[float] = None
     review_count: Optional[int] = None
+    ean: Optional[str] = None
     amazon_data: Optional[Dict[str, Any]] = {}
     is_active: bool = True
 
@@ -39,6 +40,7 @@ class ProductUpdate(BaseModel):
     availability: Optional[str] = None
     rating: Optional[float] = None
     review_count: Optional[int] = None
+    ean: Optional[str] = None
     amazon_data: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
     is_available: Optional[bool] = None

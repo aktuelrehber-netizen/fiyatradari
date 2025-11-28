@@ -9,7 +9,6 @@ import os
 
 from app.core.config import settings
 from app.core.rate_limit import RateLimitMiddleware, LoginRateLimitMiddleware
-from app.core.monitoring import init_sentry, init_prometheus
 from app.api import api_router
 from app.db.database import engine
 from app.db.base import Base
@@ -20,11 +19,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# Initialize Sentry (if DSN provided)
-sentry_dsn = os.getenv("SENTRY_DSN")
-if sentry_dsn:
-    init_sentry(sentry_dsn)
 
 # Create FastAPI app
 app = FastAPI(
@@ -86,21 +80,8 @@ if settings.ENVIRONMENT == "production":
 # 5. GZip compression for responses
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Initialize Prometheus metrics
-init_prometheus(app)
-
 # Include API router
 app.include_router(api_router, prefix="/api/v1")
-
-
-# Manual metrics endpoint (if instrumentator.expose doesn't work)
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from fastapi.responses import Response
-
-@app.get("/metrics")
-async def metrics():
-    """Prometheus metrics endpoint"""
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.on_event("startup")
@@ -123,12 +104,6 @@ async def startup_event():
         FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
         logger.info(f"✅ Redis cache initialized at {redis_url}")
         
-        # Start background metrics updater
-        from app.core.metrics_updater import update_business_metrics
-        import asyncio
-        asyncio.create_task(update_business_metrics())
-        logger.info("✅ Metrics updater started")
-        
     except Exception as e:
         logger.error(f"Error during startup: {e}")
 
@@ -146,15 +121,6 @@ async def root():
         "message": "Fiyat Radarı API",
         "version": "1.0.0",
         "docs": "/docs"
-    }
-
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "fiyatradari-api"
     }
 
 

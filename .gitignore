@@ -74,6 +74,16 @@ docker-compose.override.yml
 tmp/
 temp/
 *.tmp
+update_deal_flags.py
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+worker_control.json
+
+# SQL Backups
+*.sql
+!backend/alembic/versions/*.sql
 
 # OS
 Thumbs.db

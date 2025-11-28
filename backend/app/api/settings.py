@@ -178,12 +178,20 @@ async def preview_telegram_template(
                 "rendered": preview_data.template.format(
                     title="Örnek Kahve Makinesi",
                     brand_line="🏷 Nespresso\n\n",
+                    cheapest_badge="🏆 6 AYIN EN UCUZU",
                     discount_percentage="35",
                     original_price="2499.00",
                     deal_price="1624.00",
+                    previous_price="2499.00",
                     discount_amount="875.00",
+                    rating="4.5",
+                    review_count="150",
                     rating_line="⭐⭐⭐⭐ 4.5/5 (150 değerlendirme)\n\n",
-                    product_url="https://amazon.com.tr/example"
+                    product_url="https://amazon.com.tr/example?tag=firsatradar06-21",
+                    is_cheapest_14days="true",
+                    is_cheapest_1month="true",
+                    is_cheapest_3months="true",
+                    is_cheapest_6months="true"
                 ),
                 "is_sample": True
             }
@@ -205,17 +213,44 @@ async def preview_telegram_template(
     
     product_url = deal.product.detail_page_url if deal.product else ""
     
+    # Get cheapest badge
+    cheapest_badge = ""
+    if deal.is_cheapest_6months:
+        cheapest_badge = "🏆 6 AYIN EN UCUZU"
+    elif deal.is_cheapest_3months:
+        cheapest_badge = "⭐ 3 AYIN EN UCUZU"
+    elif deal.is_cheapest_1month:
+        cheapest_badge = "💎 AYIN EN UCUZU"
+    elif deal.is_cheapest_14days:
+        cheapest_badge = "✨ 14 GÜNÜN EN UCUZU"
+    
+    # Extract rating and review count separately
+    rating_value = ""
+    review_count_value = ""
+    if deal.product and deal.product.rating:
+        rating_value = f"{deal.product.rating:.1f}"
+        if deal.product.review_count:
+            review_count_value = str(deal.product.review_count)
+    
     # Render template
     try:
         rendered = preview_data.template.format(
             title=deal.title[:200],
             brand_line=brand_line,
+            cheapest_badge=cheapest_badge,
             discount_percentage=discount_pct,
             original_price=f"{float(deal.original_price):.2f}",
             deal_price=f"{float(deal.deal_price):.2f}",
+            previous_price=f"{float(deal.previous_price):.2f}" if deal.previous_price else f"{float(deal.original_price):.2f}",
             discount_amount=f"{float(deal.discount_amount):.2f}",
+            rating=rating_value,
+            review_count=review_count_value,
             rating_line=rating_line,
-            product_url=product_url
+            product_url=product_url,
+            is_cheapest_14days="true" if deal.is_cheapest_14days else "false",
+            is_cheapest_1month="true" if deal.is_cheapest_1month else "false",
+            is_cheapest_3months="true" if deal.is_cheapest_3months else "false",
+            is_cheapest_6months="true" if deal.is_cheapest_6months else "false"
         )
         
         return {

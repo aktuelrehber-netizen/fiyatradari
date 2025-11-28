@@ -403,3 +403,170 @@ export const systemAPI = {
     return response.data
   },
 }
+
+// Jobs API
+export const jobsAPI = {
+  listSchedules: async (jobType?: string, enabledOnly?: boolean) => {
+    const params = new URLSearchParams()
+    if (jobType) params.append('job_type', jobType)
+    if (enabledOnly) params.append('enabled_only', 'true')
+    const response = await apiClient.get(`/jobs/schedules?${params.toString()}`)
+    return response.data
+  },
+  
+  getSchedule: async (id: number) => {
+    const response = await apiClient.get(`/jobs/schedules/${id}`)
+    return response.data
+  },
+  
+  createSchedule: async (data: any) => {
+    const response = await apiClient.post('/jobs/schedules', data)
+    return response.data
+  },
+  
+  updateSchedule: async (id: number, data: any) => {
+    const response = await apiClient.put(`/jobs/schedules/${id}`, data)
+    return response.data
+  },
+  
+  deleteSchedule: async (id: number) => {
+    const response = await apiClient.delete(`/jobs/schedules/${id}`)
+    return response.data
+  },
+  
+  toggleSchedule: async (id: number, enabled: boolean) => {
+    const response = await apiClient.post(`/jobs/schedules/${id}/toggle?enabled=${enabled}`)
+    return response.data
+  },
+  
+  runSchedule: async (id: number) => {
+    const response = await apiClient.post(`/jobs/schedules/${id}/run`)
+    return response.data
+  },
+  
+  listTemplates: async (category?: string, featuredOnly?: boolean) => {
+    const params = new URLSearchParams()
+    if (category) params.append('category', category)
+    if (featuredOnly) params.append('featured_only', 'true')
+    const response = await apiClient.get(`/jobs/templates?${params.toString()}`)
+    return response.data
+  },
+  
+  getTemplate: async (id: number) => {
+    const response = await apiClient.get(`/jobs/templates/${id}`)
+    return response.data
+  },
+  
+  applyTemplate: async (id: number, scheduleName?: string) => {
+    const params = scheduleName ? `?schedule_name=${encodeURIComponent(scheduleName)}` : ''
+    const response = await apiClient.post(`/jobs/templates/${id}/apply${params}`)
+    return response.data
+  },
+  
+  getStatistics: async () => {
+    const response = await apiClient.get('/jobs/statistics')
+    return response.data
+  },
+}
+
+// Crawlers API
+export const crawlersAPI = {
+  listConfigs: async (crawlerType?: string, activeOnly?: boolean) => {
+    const params = new URLSearchParams()
+    if (crawlerType) params.append('crawler_type', crawlerType)
+    if (activeOnly) params.append('active_only', 'true')
+    const response = await apiClient.get(`/crawlers/?${params.toString()}`)
+    return response.data
+  },
+  
+  getConfig: async (id: number) => {
+    const response = await apiClient.get(`/crawlers/${id}`)
+    return response.data
+  },
+  
+  createConfig: async (data: any) => {
+    const response = await apiClient.post('/crawlers/', data)
+    return response.data
+  },
+  
+  updateConfig: async (id: number, data: any) => {
+    const response = await apiClient.put(`/crawlers/${id}`, data)
+    return response.data
+  },
+  
+  deleteConfig: async (id: number) => {
+    const response = await apiClient.delete(`/crawlers/${id}`)
+    return response.data
+  },
+  
+  toggleConfig: async (id: number, active: boolean) => {
+    const response = await apiClient.post(`/crawlers/${id}/toggle?active=${active}`)
+    return response.data
+  },
+  
+  getStats: async (id: number) => {
+    const response = await apiClient.get(`/crawlers/${id}/stats`)
+    return response.data
+  },
+  
+  testConfig: async (id: number, testUrl: string) => {
+    const response = await apiClient.post(`/crawlers/${id}/test?test_url=${encodeURIComponent(testUrl)}`)
+    return response.data
+  },
+  
+  getStatistics: async () => {
+    const response = await apiClient.get('/crawlers/statistics/overview')
+    return response.data
+  },
+}
+
+// Notifications API
+export const notificationsAPI = {
+  listTemplates: async (templateType?: string, activeOnly?: boolean) => {
+    const params = new URLSearchParams()
+    if (templateType) params.append('template_type', templateType)
+    if (activeOnly) params.append('active_only', 'true')
+    const response = await apiClient.get(`/notifications/templates?${params.toString()}`)
+    return response.data
+  },
+  
+  getTemplate: async (id: number) => {
+    const response = await apiClient.get(`/notifications/templates/${id}`)
+    return response.data
+  },
+  
+  createTemplate: async (data: any) => {
+    const response = await apiClient.post('/notifications/templates', data)
+    return response.data
+  },
+  
+  updateTemplate: async (id: number, data: any) => {
+    const response = await apiClient.put(`/notifications/templates/${id}`, data)
+    return response.data
+  },
+  
+  deleteTemplate: async (id: number) => {
+    const response = await apiClient.delete(`/notifications/templates/${id}`)
+    return response.data
+  },
+  
+  toggleTemplate: async (id: number, active: boolean) => {
+    const response = await apiClient.post(`/notifications/templates/${id}/toggle?active=${active}`)
+    return response.data
+  },
+  
+  setDefaultTemplate: async (id: number) => {
+    const response = await apiClient.post(`/notifications/templates/${id}/set-default`)
+    return response.data
+  },
+  
+  previewTemplate: async (id: number, sampleData?: any) => {
+    const response = await apiClient.post(`/notifications/templates/${id}/preview`, sampleData)
+    return response.data
+  },
+  
+  getStatistics: async () => {
+    const response = await apiClient.get('/notifications/statistics')
+    return response.data
+  },
+}

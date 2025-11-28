@@ -25,12 +25,20 @@ export function TelegramTemplateEditor({ onSave }: TelegramTemplateEditorProps) 
   const variables = [
     { name: '{title}', desc: 'Ürün başlığı' },
     { name: '{brand_line}', desc: 'Marka satırı (otomatik)' },
+    { name: '{cheapest_badge}', desc: '🏆 En ucuz badge (otomatik)' },
     { name: '{discount_percentage}', desc: 'İndirim %' },
     { name: '{original_price}', desc: 'Orijinal fiyat' },
     { name: '{deal_price}', desc: 'İndirimli fiyat' },
+    { name: '{previous_price}', desc: 'Önceki fiyat (price history)' },
     { name: '{discount_amount}', desc: 'İndirim miktarı (TL)' },
-    { name: '{rating_line}', desc: 'Yıldız değerlendirmesi (otomatik)' },
+    { name: '{rating}', desc: 'Yıldız puanı (4.5)' },
+    { name: '{review_count}', desc: 'Değerlendirme sayısı (150)' },
+    { name: '{rating_line}', desc: 'Yıldız satırı (otomatik, ⭐⭐⭐⭐ 4.5/5)' },
     { name: '{product_url}', desc: 'Affiliate link' },
+    { name: '{is_cheapest_14days}', desc: '14 günün en ucuzu mu? (true/false)' },
+    { name: '{is_cheapest_1month}', desc: '1 ayın en ucuzu mu? (true/false)' },
+    { name: '{is_cheapest_3months}', desc: '3 ayın en ucuzu mu? (true/false)' },
+    { name: '{is_cheapest_6months}', desc: '6 ayın en ucuzu mu? (true/false)' },
   ]
 
   useEffect(() => {

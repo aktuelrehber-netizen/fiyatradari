@@ -48,8 +48,8 @@ const menuItems = [
     icon: Users,
   },
   {
-    title: 'Sistem Yönetimi',
-    href: '/dashboard/system',
+    title: 'Monitoring',
+    href: '/dashboard/monitoring',
     icon: Server,
   },
   {

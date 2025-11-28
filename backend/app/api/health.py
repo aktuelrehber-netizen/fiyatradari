@@ -1,227 +1,194 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import func, and_, desc
 from datetime import datetime, timedelta
-
+from typing import List, Dict, Any
 from app.db.database import get_db
 from app.db import models
-from app.schemas.setting import DashboardStats
+from app.api.auth import get_current_user
 
 router = APIRouter()
 
 
-@router.get("/")
-async def health_check(db: Session = Depends(get_db)):
-    """Health check endpoint with database status"""
-    try:
-        # Test database connection
-        db.execute(text("SELECT 1"))
-        db_status = "healthy"
-    except Exception as e:
-        db_status = f"unhealthy: {str(e)}"
+@router.get("/health/dashboard")
+async def get_dashboard_stats(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Dashboard ana istatistikleri
+    """
+    # Bugünün başlangıcı
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     
-    return {
-        "status": "healthy" if db_status == "healthy" else "degraded",
-        "timestamp": datetime.utcnow(),
-        "database": db_status,
-        "service": "fiyatradari-api"
-    }
-
-
-@router.get("/dashboard", response_model=DashboardStats)
-async def get_dashboard_stats(db: Session = Depends(get_db)):
-    """Get dashboard statistics"""
-    
-    # Count products
+    # Temel istatistikler
     total_products = db.query(models.Product).count()
     active_products = db.query(models.Product).filter(
         models.Product.is_active == True
     ).count()
     
-    # Count categories
-    total_categories = db.query(models.Category).filter(
-        models.Category.is_active == True
-    ).count()
+    total_categories = db.query(models.Category).count()
     
-    # Count active deals
     active_deals = db.query(models.Deal).filter(
         models.Deal.is_active == True
     ).count()
     
-    # Count telegram messages sent
+    # Bugün oluşturulan fiyat değişiklikleri (deals)
+    price_changes_today = db.query(models.Deal).filter(
+        models.Deal.created_at >= today
+    ).count()
+    
+    # Telegram mesajları (published deals)
     telegram_messages_sent = db.query(models.Deal).filter(
-        models.Deal.telegram_sent == True
+        models.Deal.is_published == True
     ).count()
     
-    # Count price checks today (products checked today)
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    total_price_checks_today = db.query(models.Product).filter(
-        models.Product.last_checked_at >= today
-    ).count()
-    
-    # Count price changes today (only when price actually changed)
-    price_changes_today = db.query(models.PriceHistory).filter(
-        models.PriceHistory.recorded_at >= today
-    ).count()
-    
-    # Get last worker run
-    last_worker_log = db.query(models.WorkerLog).order_by(
-        models.WorkerLog.created_at.desc()
+    # Son worker çalışma zamanı (son kategori kontrolü)
+    last_category = db.query(models.Category).order_by(
+        desc(models.Category.last_checked_at)
     ).first()
-    last_worker_run = last_worker_log.created_at if last_worker_log else None
     
-    # Determine system health
-    system_health = "healthy"
-    if last_worker_run:
-        hours_since_last_run = (datetime.utcnow() - last_worker_run).total_seconds() / 3600
-        if hours_since_last_run > 24:
-            system_health = "warning"
+    last_worker_run = last_category.last_checked_at.isoformat() if last_category and last_category.last_checked_at else None
     
-    return DashboardStats(
-        total_products=total_products,
-        active_products=active_products,
-        total_categories=total_categories,
-        active_deals=active_deals,
-        total_price_checks_today=total_price_checks_today,
-        price_changes_today=price_changes_today,
-        telegram_messages_sent=telegram_messages_sent,
-        last_worker_run=last_worker_run,
-        system_health=system_health
-    )
+    return {
+        "total_products": total_products,
+        "active_products": active_products,
+        "total_categories": total_categories,
+        "active_deals": active_deals,
+        "total_price_checks_today": price_changes_today,
+        "price_changes_today": price_changes_today,
+        "telegram_messages_sent": telegram_messages_sent,
+        "last_worker_run": last_worker_run,
+        "system_health": "operational"
+    }
 
 
-@router.get("/analytics/trends")
-async def get_trends(db: Session = Depends(get_db)):
-    """Get trend data for charts"""
-    
-    # Last 7 days price checks
+@router.get("/health/analytics/trends")
+async def get_trends(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Son 7 günün aktivite trendi
+    """
+    # Son 7 gün
     trends = []
-    for i in range(6, -1, -1):
-        day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i)
-        next_day = day + timedelta(days=1)
+    for i in range(7):
+        day = datetime.now() - timedelta(days=6-i)
+        day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
         
-        count = db.query(models.PriceHistory).filter(
-            models.PriceHistory.recorded_at >= day,
-            models.PriceHistory.recorded_at < next_day
+        # O gün oluşturulan price check'ler (products)
+        price_checks = db.query(models.Product).filter(
+            and_(
+                models.Product.created_at >= day_start,
+                models.Product.created_at < day_end
+            )
         ).count()
         
-        deals_count = db.query(models.Deal).filter(
-            models.Deal.created_at >= day,
-            models.Deal.created_at < next_day
+        # O gün oluşturulan deals
+        deals = db.query(models.Deal).filter(
+            and_(
+                models.Deal.created_at >= day_start,
+                models.Deal.created_at < day_end
+            )
         ).count()
         
         trends.append({
-            "date": day.strftime("%d %b"),
-            "price_checks": count,
-            "deals": deals_count
+            "date": day.strftime("%d.%m"),
+            "price_checks": price_checks,
+            "deals": deals
         })
     
     return {"trends": trends}
 
 
-@router.get("/analytics/categories")
-async def get_category_stats(db: Session = Depends(get_db)):
-    """Get category distribution"""
-    
-    from sqlalchemy import func
-    
-    # Product count by category
-    category_data = db.query(
+@router.get("/health/analytics/categories")
+async def get_category_stats(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Kategorilere göre ürün dağılımı
+    """
+    # Her kategorideki ürün sayısı
+    category_stats = db.query(
         models.Category.name,
-        func.count(models.Product.id).label('product_count')
-    ).outerjoin(
-        models.Product, models.Category.id == models.Product.category_id
-    ).filter(
-        models.Category.is_active == True
+        func.count(models.Product.id).label('count')
+    ).join(
+        models.Product,
+        models.Product.category_id == models.Category.id
     ).group_by(
-        models.Category.id, models.Category.name
-    ).order_by(
-        func.count(models.Product.id).desc()
-    ).limit(10).all()
+        models.Category.id,
+        models.Category.name
+    ).all()
     
-    return {
-        "categories": [
-            {"name": name, "value": count}
-            for name, count in category_data
-        ]
-    }
+    categories = [
+        {"name": name, "value": count}
+        for name, count in category_stats
+    ]
+    
+    return {"categories": categories}
 
 
-@router.get("/analytics/top-deals")
-async def get_top_deals(db: Session = Depends(get_db)):
-    """Get top deals by discount"""
-    
+@router.get("/health/analytics/top-deals")
+async def get_top_deals(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    limit: int = 5
+):
+    """
+    En yüksek indirimli deals
+    """
     deals = db.query(models.Deal).filter(
         models.Deal.is_active == True
     ).order_by(
-        models.Deal.discount_percentage.desc()
-    ).limit(5).all()
+        desc(models.Deal.discount_percentage)
+    ).limit(limit).all()
     
-    return {
-        "deals": [
-            {
+    result = []
+    for deal in deals:
+        product = db.query(models.Product).filter(
+            models.Product.id == deal.product_id
+        ).first()
+        
+        if product:
+            result.append({
                 "id": deal.id,
-                "title": deal.title,
-                "discount_percentage": float(deal.discount_percentage),
+                "title": product.title,
+                "discount_percentage": float(deal.discount_percentage) if deal.discount_percentage else 0,
                 "deal_price": str(deal.deal_price),
                 "original_price": str(deal.original_price),
-                "currency": deal.currency,
-                "created_at": deal.created_at.isoformat() if deal.created_at else datetime.utcnow().isoformat()
-            }
-            for deal in deals
-        ]
-    }
+                "currency": product.currency or "TRY",
+                "created_at": deal.created_at.isoformat() if deal.created_at else None
+            })
+    
+    return {"deals": result}
 
 
-@router.get("/analytics/recent-products")
-async def get_recent_products(db: Session = Depends(get_db)):
-    """Get recently added products"""
+@router.get("/health/analytics/recent-products")
+async def get_recent_products(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    limit: int = 5
+):
+    """
+    Yeni eklenen ürünler
+    """
+    products = db.query(models.Product).order_by(
+        desc(models.Product.created_at)
+    ).limit(limit).all()
     
-    products = db.query(models.Product).filter(
-        models.Product.is_active == True
-    ).order_by(
-        models.Product.created_at.desc()
-    ).limit(5).all()
+    result = []
+    for product in products:
+        result.append({
+            "id": product.id,
+            "title": product.title,
+            "brand": product.brand,
+            "current_price": str(product.current_price) if product.current_price else "0",
+            "currency": product.currency or "TRY",
+            "image_url": product.image_url,
+            "created_at": product.created_at.isoformat() if product.created_at else None
+        })
     
-    return {
-        "products": [
-            {
-                "id": product.id,
-                "title": product.title,
-                "brand": product.brand,
-                "current_price": str(product.current_price),
-                "currency": product.currency,
-                "image_url": product.image_url,
-                "created_at": product.created_at.isoformat() if product.created_at else datetime.utcnow().isoformat()
-            }
-            for product in products
-        ]
-    }
-
-
-@router.get("/services")
-async def get_service_status(db: Session = Depends(get_db)):
-    """Get status of all services"""
-    
-    # Check database
-    try:
-        db.execute(text("SELECT 1"))
-        database_status = "healthy"
-    except:
-        database_status = "unhealthy"
-    
-    # Check Redis (optional - if you want to add later)
-    # For now, just return API and Database status
-    
-    return {
-        "services": {
-            "api": {
-                "status": "healthy",
-                "uptime": "running"
-            },
-            "database": {
-                "status": database_status
-            }
-        },
-        "timestamp": datetime.utcnow()
-    }
+    return {"products": result}

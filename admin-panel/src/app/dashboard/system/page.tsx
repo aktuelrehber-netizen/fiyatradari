@@ -13,8 +13,10 @@ import { systemAPI } from '@/utils/api-client'
 import { CacheManager } from '@/components/CacheManager'
 import { 
   Activity, Server, Zap, Database, Clock, Play, Pause, 
-  RefreshCw, Loader2, X, TrendingUp, AlertCircle, CheckCircle2
+  RefreshCw, Loader2, X, TrendingUp, AlertCircle, CheckCircle2,
+  Calendar, Globe, Bell, ArrowRight
 } from 'lucide-react'
+import Link from 'next/link'
 
 interface SystemHealth {
   status: string
@@ -285,6 +287,97 @@ export default function SystemManagementPage() {
           </Button>
         </div>
       </div>
+
+      {/* Services Quick Access */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Zap className="w-5 h-5 text-blue-600" />
+            Servis Yönetimi
+          </CardTitle>
+          <CardDescription>
+            Modüler servislere hızlı erişim
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Jobs Management */}
+            <Link href="/dashboard/jobs">
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-blue-500">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="w-8 h-8 text-blue-600" />
+                        <div>
+                          <h3 className="font-bold text-lg">Job Yönetimi</h3>
+                          <p className="text-xs text-muted-foreground">
+                            Otomatik görevler
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Zamanlayıcı, şablonlar ve job kontrolleri
+                      </p>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+
+            {/* Crawler Management */}
+            <Link href="/dashboard/crawlers">
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-green-500">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Globe className="w-8 h-8 text-green-600" />
+                        <div>
+                          <h3 className="font-bold text-lg">Crawler Yönetimi</h3>
+                          <p className="text-xs text-muted-foreground">
+                            Web crawler profilleri
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Rate limit, proxy ve performans ayarları
+                      </p>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+
+            {/* Notification Management */}
+            <Link href="/dashboard/notifications">
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow border-2 hover:border-purple-500">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Bell className="w-8 h-8 text-purple-600" />
+                        <div>
+                          <h3 className="font-bold text-lg">Bildirimler</h3>
+                          <p className="text-xs text-muted-foreground">
+                            Telegram şablonları
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Mesaj şablonları ve bildirim ayarları
+                      </p>
+                    </div>
+                    <ArrowRight className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Health & Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

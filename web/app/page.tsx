@@ -6,6 +6,28 @@ import { TrendingDown, ExternalLink, Send, Zap, Bell, Tag, Sparkles, Clock, Shie
 // ISR: Revalidate every 30 seconds (faster updates when ratings change)
 export const revalidate = 30
 
+// Amazon Affiliate Tag
+const AMAZON_PARTNER_TAG = 'firsatradar06-21'
+
+// Generate Amazon affiliate link
+function getAmazonLink(product: any): string {
+  if (!product) return '#'
+  
+  // If detail_page_url exists, add partner tag
+  if (product.detail_page_url) {
+    const url = product.detail_page_url
+    const separator = url.includes('?') ? '&' : '?'
+    return `${url}${separator}tag=${AMAZON_PARTNER_TAG}`
+  }
+  
+  // Otherwise, generate from ASIN
+  if (product.asin) {
+    return `https://www.amazon.com.tr/dp/${product.asin}?tag=${AMAZON_PARTNER_TAG}`
+  }
+  
+  return '#'
+}
+
 export default async function Home() {
   let deals = []
   let categories = []
@@ -127,6 +149,22 @@ export default async function Home() {
                 
                 const timeBadge = getTimeBadge()
                 
+                // Get "cheapest" badge
+                const getCheapestBadge = () => {
+                  if (deal.is_cheapest_6months) {
+                    return { text: '🏆 6 AYIN EN UCUZU', className: 'bg-purple-600', icon: '👑' }
+                  } else if (deal.is_cheapest_3months) {
+                    return { text: '⭐ 3 AYIN EN UCUZU', className: 'bg-indigo-600', icon: '⭐' }
+                  } else if (deal.is_cheapest_1month) {
+                    return { text: '💎 AYIN EN UCUZU', className: 'bg-blue-600', icon: '💎' }
+                  } else if (deal.is_cheapest_14days) {
+                    return { text: '✨ 14 GÜNÜN EN UCUZU', className: 'bg-cyan-600', icon: '✨' }
+                  }
+                  return null
+                }
+                
+                const cheapestBadge = getCheapestBadge()
+                
                 return (
                   <div
                     key={deal.id}
@@ -144,16 +182,24 @@ export default async function Home() {
                         />
                       )}
                       
-                      {/* Time Badge - Top Left */}
+                      {/* Cheapest Badge - Top (Full Width) */}
+                      {cheapestBadge && (
+                        <div className={`absolute top-2 left-2 right-2 ${cheapestBadge.className} text-white px-2 py-1.5 rounded-lg font-bold text-[9px] md:text-[10px] shadow-xl text-center border-2 border-white/20 backdrop-blur-sm`}>
+                          <span className="mr-1">{cheapestBadge.icon}</span>
+                          {cheapestBadge.text}
+                        </div>
+                      )}
+                      
+                      {/* Time Badge - Below Cheapest or Top Left */}
                       {timeBadge && (
-                        <div className={`absolute top-2 left-2 ${timeBadge.className} text-white px-2 py-1 rounded-lg font-bold text-[10px] md:text-xs shadow-lg`}>
+                        <div className={`absolute ${cheapestBadge ? 'top-12' : 'top-2'} left-2 ${timeBadge.className} text-white px-2 py-1 rounded-lg font-bold text-[10px] md:text-xs shadow-lg`}>
                           {timeBadge.text}
                         </div>
                       )}
                       
                       {/* Discount Badge - Top Right */}
                       {discountPercentage > 0 && (
-                        <div className="absolute top-2 right-2 bg-[#FF9900] text-white px-2 py-1 rounded-lg font-bold text-[10px] md:text-xs flex items-center gap-1 shadow-lg">
+                        <div className={`absolute ${cheapestBadge ? 'top-12' : 'top-2'} right-2 bg-[#FF9900] text-white px-2 py-1 rounded-lg font-bold text-[10px] md:text-xs flex items-center gap-1 shadow-lg`}>
                           <TrendingDown className="h-3 w-3" />
                           <span>%{discountPercentage.toFixed(0)}</span>
                         </div>
@@ -178,7 +224,22 @@ export default async function Home() {
                             {parseFloat(deal.deal_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                           </span>
                         </div>
-                        {deal.original_price && parseFloat(deal.original_price) > parseFloat(deal.deal_price) && (
+                        
+                        {/* Price comparison with previous price */}
+                        {deal.previous_price && parseFloat(deal.previous_price) > parseFloat(deal.deal_price) && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] md:text-xs text-gray-400 line-through">
+                              {parseFloat(deal.previous_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
+                            </span>
+                            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5">
+                              <TrendingDown className="h-2.5 w-2.5" />
+                              -{discountPercentage.toFixed(0)}%
+                            </span>
+                          </div>
+                        )}
+                        
+                        {/* Fallback to original_price if no previous_price */}
+                        {!deal.previous_price && deal.original_price && parseFloat(deal.original_price) > parseFloat(deal.deal_price) && (
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] md:text-xs text-gray-400 line-through">
                               {parseFloat(deal.original_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
@@ -191,9 +252,9 @@ export default async function Home() {
                       </div>
 
                       {/* Amazon Link */}
-                      {deal.product?.detail_page_url && (
+                      {deal.product && (
                         <a
-                          href={deal.product.detail_page_url}
+                          href={getAmazonLink(deal.product)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="block w-full bg-[#FF9900] hover:bg-[#FF9900]/90 text-white text-center py-2 rounded-lg text-xs md:text-sm font-semibold transition-all hover:shadow-lg active:scale-95"

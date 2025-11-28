@@ -3,13 +3,19 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { dealsAPI } from '@/utils/api-client'
-import { Eye, Send, CheckCircle, XCircle, Edit, RefreshCw, Filter } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { dealsAPI, categoriesAPI } from '@/utils/api-client'
+import { formatTurkishPrice } from '@/utils/format'
+import { Eye, Send, CheckCircle, XCircle, Edit, RefreshCw, Filter, ExternalLink, Search, Check, ChevronsUpDown, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { PaginationControls } from '@/components/pagination-controls'
 import { useToast } from '@/hooks/use-toast'
 import { DealViewModal } from '@/components/modals/deal-view-modal'
+import Image from 'next/image'
 
 interface Deal {
   id: number
@@ -27,23 +33,57 @@ interface Deal {
   telegram_sent_at: string | null
   published_at: string | null
   created_at: string
+  product: {
+    image_url: string | null
+    detail_page_url: string | null
+    brand: string | null
+    asin: string | null
+    rating: number | null
+    review_count: number | null
+    category_id: number | null
+  } | null
+}
+
+interface Category {
+  id: number
+  name: string
+  amazon_node_id: string
 }
 
 export default function DealsPage() {
   const { toast } = useToast()
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'all' | 'active' | 'published' | 'pending'>('all')
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<'all' | 'active' | 'published' | 'telegram_sent'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [categories, setCategories] = useState<Category[]>([])
+  const [categoryOpen, setCategoryOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
   const [perPage] = useState(50)
   const [viewModalOpen, setViewModalOpen] = useState(false)
   const [selectedDealId, setSelectedDealId] = useState<number | null>(null)
 
+  const AMAZON_PARTNER_TAG = 'firsatradar06-21'
+
+  useEffect(() => {
+    loadCategories()
+  }, [])
+
   useEffect(() => {
     setCurrentPage(1)
     loadDeals(1)
-  }, [filter])
+  }, [filter, categoryFilter])
+
+  const loadCategories = async () => {
+    try {
+      const data = await categoriesAPI.list()
+      setCategories(data)
+    } catch (error) {
+      console.error('Failed to load categories:', error)
+    }
+  }
 
   const loadDeals = async (page: number = 1) => {
     setLoading(true)
@@ -53,13 +93,20 @@ export default function DealsPage() {
         limit: perPage,
       }
       
+      if (search.trim()) {
+        params.search = search.trim()
+      }
+      
       if (filter === 'active') {
         params.is_active = true
       } else if (filter === 'published') {
         params.is_published = true
-      } else if (filter === 'pending') {
-        params.is_published = false
-        params.is_active = true
+      } else if (filter === 'telegram_sent') {
+        params.telegram_sent = true
+      }
+      
+      if (categoryFilter !== 'all') {
+        params.category_id = parseInt(categoryFilter)
       }
       
       const data = await dealsAPI.list(params)
@@ -74,6 +121,11 @@ export default function DealsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSearch = () => {
+    setCurrentPage(1)
+    loadDeals(1)
   }
 
   const handlePublish = async (id: number) => {
@@ -164,42 +216,142 @@ export default function DealsPage() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Filter className="h-4 w-4 text-gray-500" />
-        <Button
-          variant={filter === 'all' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('all')}
-        >
-          Tümü
-        </Button>
-        <Button
-          variant={filter === 'active' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('active')}
-        >
-          Aktif
-        </Button>
-        <Button
-          variant={filter === 'pending' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('pending')}
-        >
-          Onay Bekleyenler
-        </Button>
-        <Button
-          variant={filter === 'published' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setFilter('published')}
-        >
-          Yayınlananlar
-        </Button>
-        {totalItems > 0 && (
-          <Badge variant="secondary" className="ml-auto">
-            {totalItems}+ Fırsat
-          </Badge>
-        )}
-      </div>
+      <Card>
+        <CardHeader>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex gap-2">
+                <Input
+                  placeholder="Fırsat adı ile ara..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  className="flex-1"
+                />
+                <Button onClick={handleSearch}>
+                  <Search className="h-4 w-4 mr-2" />
+                  Ara
+                </Button>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              <Filter className="h-4 w-4 text-gray-500" />
+              <Button
+                variant={filter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter('all')}
+              >
+                Tümü
+              </Button>
+              <Button
+                variant={filter === 'active' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter('active')}
+              >
+                Aktif
+              </Button>
+              <Button
+                variant={filter === 'published' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter('published')}
+              >
+                Yayındakiler
+              </Button>
+              <Button
+                variant={filter === 'telegram_sent' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilter('telegram_sent')}
+              >
+                Telegram'a Gönderilenler
+              </Button>
+              
+              <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={categoryOpen}
+                    size="sm"
+                    className="w-[180px] justify-between"
+                  >
+                    {categoryFilter === 'all'
+                      ? 'Kategori Seç...'
+                      : categories.find((cat) => cat.id.toString() === categoryFilter)?.name || 'Kategori Seç...'}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[180px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Kategori ara..." />
+                    <CommandList>
+                      <CommandEmpty>Kategori bulunamadı.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="all"
+                          onSelect={() => {
+                            setCategoryFilter('all')
+                            setCategoryOpen(false)
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 h-4 w-4',
+                              categoryFilter === 'all' ? 'opacity-100' : 'opacity-0'
+                            )}
+                          />
+                          Tüm Kategoriler
+                        </CommandItem>
+                        {categories.map((cat) => (
+                          <CommandItem
+                            key={cat.id}
+                            value={cat.name}
+                            onSelect={() => {
+                              setCategoryFilter(cat.id.toString())
+                              setCategoryOpen(false)
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                categoryFilter === cat.id.toString() ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            {cat.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              
+              {(filter !== 'all' || categoryFilter !== 'all' || search.trim()) && (
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    setFilter('all')
+                    setCategoryFilter('all')
+                    setSearch('')
+                    setCurrentPage(1)
+                    loadDeals(1)
+                  }}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Temizle
+                </Button>
+              )}
+              
+              {totalItems > 0 && (
+                <Badge variant="secondary" className="ml-auto">
+                  {totalItems}+ Fırsat
+                </Badge>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -209,6 +361,7 @@ export default function DealsPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16">Resim</TableHead>
                 <TableHead>Fırsat Başlığı</TableHead>
                 <TableHead className="text-right">Orijinal Fiyat</TableHead>
                 <TableHead className="text-right">İndirimli Fiyat</TableHead>
@@ -221,18 +374,34 @@ export default function DealsPage() {
             <TableBody>
               {deals.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
-                    Henüz fırsat tespit edilmemiş
+                  <TableCell colSpan={8} className="text-center text-gray-500 py-8">
+                    {search ? 'Fırsat bulunamadı' : 'Henüz fırsat tespit edilmemiş'}
                   </TableCell>
                 </TableRow>
               ) : (
                 deals.map((deal) => (
                   <TableRow key={deal.id}>
+                    <TableCell className="py-2">
+                      {deal.product?.image_url && (
+                        <div className="relative h-12 w-12 bg-gray-100 rounded">
+                          <Image
+                            src={deal.product.image_url}
+                            alt={deal.title}
+                            fill
+                            sizes="48px"
+                            className="object-contain p-1"
+                          />
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
-                      <div className="font-medium">{deal.title}</div>
-                      {deal.description && (
-                        <div className="text-sm text-gray-500 line-clamp-1 mt-1">
-                          {deal.description}
+                      <div className="font-medium line-clamp-2">{deal.title}</div>
+                      {deal.product?.brand && (
+                        <div className="text-xs text-gray-500 mt-0.5">{deal.product.brand}</div>
+                      )}
+                      {deal.product?.rating && (
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          ⭐ {deal.product.rating}/5 ({deal.product.review_count} değerlendirme)
                         </div>
                       )}
                       <div className="text-xs text-gray-400 mt-1">
@@ -240,10 +409,10 @@ export default function DealsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right text-gray-500 line-through">
-                      {parseFloat(deal.original_price).toFixed(2)} {deal.currency}
+                      {formatTurkishPrice(parseFloat(deal.original_price))} ₺
                     </TableCell>
                     <TableCell className="text-right font-semibold text-green-600">
-                      {parseFloat(deal.deal_price).toFixed(2)} {deal.currency}
+                      {formatTurkishPrice(parseFloat(deal.deal_price))} ₺
                     </TableCell>
                     <TableCell className="text-center">
                       <Badge variant="warning" className="font-bold">
@@ -274,6 +443,18 @@ export default function DealsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {deal.product?.detail_page_url && (
+                          <a 
+                            href={deal.product.detail_page_url || `https://www.amazon.com.tr/dp/${deal.product.asin}?tag=${AMAZON_PARTNER_TAG}`}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            title="Amazon'da Görüntüle"
+                          >
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </a>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm"

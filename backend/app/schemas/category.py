@@ -55,6 +55,7 @@ class CategoryUpdate(BaseModel):
 
 class Category(CategoryBase):
     id: int
+    last_checked_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     

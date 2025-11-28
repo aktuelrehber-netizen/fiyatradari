@@ -1,326 +1,247 @@
-from fastapi import APIRouter, HTTPException
-from typing import Dict, List, Any
-import redis
+"""
+Celery task monitoring endpoints
+"""
+from typing import List, Dict, Any
+from fastapi import APIRouter, Depends
 from datetime import datetime, timedelta
-import json
+
+from app.api.auth import get_current_user
+from app.db import models
+from app.celery_app import celery_app
 
 router = APIRouter()
 
-# Redis connection for Celery
-redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
 
-# Cache for worker stats (to avoid slow Celery inspect calls)
-_worker_stats_cache = None
-_worker_stats_cache_time = None
-CACHE_TTL_SECONDS = 10  # Cache for 10 seconds (reduced inspect frequency)
-
-
-def get_celery_inspect():
-    """Get Celery inspect instance with timeout"""
-    from celery import Celery
+@router.get("/celery/status")
+async def celery_status(current_user: models.User = Depends(get_current_user)):
+    """Celery worker ve scheduler durumu"""
     
-    celery_app = Celery('fiyatradari')
-    celery_app.config_from_object({
-        'broker_url': 'redis://redis:6379/0',
-        'result_backend': 'redis://redis:6379/1',
-        'broker_connection_timeout': 3.0,  # 3 second timeout
-        'broker_connection_max_retries': 1,
-    })
+    # Active workers
+    inspect = celery_app.control.inspect()
     
-    return celery_app.control.inspect(timeout=2.0)  # 2 second timeout for inspect
+    active_tasks = inspect.active()
+    registered_tasks = inspect.registered()
+    stats = inspect.stats()
+    
+    return {
+        "workers_online": len(stats) if stats else 0,
+        "active_tasks": active_tasks or {},
+        "registered_tasks": registered_tasks or {},
+        "stats": stats or {},
+        "broker_url": "redis://redis:6379/0",
+        "backend_url": "redis://redis:6379/0"
+    }
 
 
-@router.get("/workers/quick-stats")
-async def get_workers_quick_stats():
-    """Get quick worker statistics (lightweight, fast, cached)"""
-    global _worker_stats_cache, _worker_stats_cache_time
+@router.get("/celery/tasks")
+async def celery_tasks(current_user: models.User = Depends(get_current_user)):
+    """Kayıtlı task listesi"""
     
-    # Check cache
-    now = datetime.utcnow()
-    if (_worker_stats_cache is not None and 
-        _worker_stats_cache_time is not None and 
-        (now - _worker_stats_cache_time).total_seconds() < CACHE_TTL_SECONDS):
-        # Return cached data
-        return _worker_stats_cache
+    inspect = celery_app.control.inspect()
+    registered = inspect.registered()
     
-    try:
-        inspect = get_celery_inspect()
+    tasks = []
+    if registered:
+        for worker, task_list in registered.items():
+            for task in task_list:
+                if task not in [t["name"] for t in tasks]:
+                    tasks.append({
+                        "name": task,
+                        "workers": [worker]
+                    })
+    
+    return {
+        "total_tasks": len(tasks),
+        "tasks": tasks
+    }
+
+
+@router.get("/celery/scheduled")
+async def celery_scheduled(current_user: models.User = Depends(get_current_user)):
+    """Zamanlanmış task'lar (beat schedule)"""
+    
+    schedule = celery_app.conf.beat_schedule
+    
+    scheduled_tasks = []
+    for name, config in schedule.items():
+        task_info = {
+            "name": name,
+            "task": config["task"],
+            "schedule": str(config["schedule"]),
+            "options": config.get("options", {})
+        }
+        scheduled_tasks.append(task_info)
+    
+    return {
+        "total_scheduled": len(scheduled_tasks),
+        "tasks": scheduled_tasks
+    }
+
+
+@router.post("/celery/tasks/{task_name}/trigger")
+async def trigger_task(
+    task_name: str,
+    current_user: models.User = Depends(get_current_user)
+):
+    """Manuel task tetikleme (debug için)"""
+    
+    # Task map
+    task_map = {
+        "check_categories": "app.tasks.check_categories_for_update",
+        "update_statistics": "app.tasks.update_statistics",
+        "cleanup_deals": "app.tasks.cleanup_old_deals",
+        "check_deal_prices": "app.tasks.check_deal_prices"
+    }
+    
+    if task_name not in task_map:
+        return {
+            "success": False,
+            "error": f"Unknown task: {task_name}",
+            "available_tasks": list(task_map.keys())
+        }
+    
+    # Task'ı tetikle
+    task = celery_app.send_task(task_map[task_name])
+    
+    return {
+        "success": True,
+        "task_name": task_name,
+        "task_id": task.id,
+        "status": "sent"
+    }
+
+
+@router.get("/celery/tasks/{task_id}/status")
+async def task_status(
+    task_id: str,
+    current_user: models.User = Depends(get_current_user)
+):
+    """Task durumunu kontrol et"""
+    
+    from celery.result import AsyncResult
+    
+    result = AsyncResult(task_id, app=celery_app)
+    
+    response = {
+        "task_id": task_id,
+        "status": result.state,
+        "ready": result.ready(),
+        "successful": result.successful() if result.ready() else None
+    }
+    
+    if result.ready():
+        if result.successful():
+            response["result"] = result.result
+        else:
+            response["error"] = str(result.info)
+    
+    return response
+
+
+@router.get("/celery/recent-tasks")
+async def recent_tasks(
+    limit: int = 50,
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Son çalışan task'ları getir (Redis'ten)
+    Celery result backend kullanılarak task history
+    """
+    import redis
+    import json
+    from celery.result import AsyncResult
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    
+    # Redis bağlantısı
+    redis_client = redis.from_url("redis://redis:6379/0")
+    
+    # Celery task key'lerini bul
+    pattern = "celery-task-meta-*"
+    keys = redis_client.keys(pattern)
+    
+    # Istanbul timezone
+    istanbul_tz = ZoneInfo('Europe/Istanbul')
+    
+    tasks = []
+    for key in keys[:limit]:
+        task_id = key.decode().replace("celery-task-meta-", "")
+        result = AsyncResult(task_id, app=celery_app)
         
-        # Just get stats (faster than getting everything)
-        stats = inspect.stats() or {}
-        active = inspect.active() or {}
+        # Redis'ten task metadata'yı direkt oku (daha detaylı bilgi için)
+        meta_raw = redis_client.get(key)
+        meta = json.loads(meta_raw) if meta_raw else {}
         
-        total_workers = len(stats)
-        total_active_tasks = sum(len(tasks) for tasks in active.values())
+        # Timestamp'i ISO formatında al
+        date_done = meta.get("date_done")
+        if date_done:
+            # UTC timestamp'i parse et ve Istanbul saatine çevir
+            try:
+                dt = datetime.fromisoformat(date_done.replace('Z', '+00:00'))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                istanbul_time = dt.astimezone(istanbul_tz)
+                timestamp = istanbul_time.isoformat()
+            except:
+                timestamp = date_done
+        else:
+            timestamp = datetime.now(istanbul_tz).isoformat()
         
-        workers = []
-        for worker_name in stats.keys():
-            worker_active_tasks = active.get(worker_name, [])
-            workers.append({
-                'name': worker_name,
-                'status': 'online',
-                'active_tasks': len(worker_active_tasks)
+        task_info = {
+            "task_id": task_id,
+            "status": result.state,
+            "name": meta.get("name") or (result.name if hasattr(result, 'name') else None),
+            "ready": result.ready(),
+            "successful": result.successful() if result.ready() else None,
+            "date_done": timestamp,  # ISO format timestamp (Istanbul timezone)
+            "timestamp": timestamp,
+        }
+        
+        # Result varsa ekle
+        if result.ready():
+            if result.successful():
+                task_info["result"] = result.result
+            else:
+                task_info["error"] = str(result.info)
+        
+        tasks.append(task_info)
+    
+    # Timestamp'e göre sırala (en yeni önce)
+    tasks.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    
+    return {
+        "total": len(tasks),
+        "tasks": tasks[:limit]
+    }
+
+
+@router.get("/celery/failed-tasks")
+async def failed_tasks(
+    current_user: models.User = Depends(get_current_user)
+):
+    """Başarısız task'ları getir"""
+    import redis
+    from celery.result import AsyncResult
+    
+    redis_client = redis.from_url("redis://redis:6379/0")
+    pattern = "celery-task-meta-*"
+    keys = redis_client.keys(pattern)
+    
+    failed = []
+    for key in keys:
+        task_id = key.decode().replace("celery-task-meta-", "")
+        result = AsyncResult(task_id, app=celery_app)
+        
+        if result.state == "FAILURE":
+            failed.append({
+                "task_id": task_id,
+                "status": result.state,
+                "name": result.name if hasattr(result, 'name') else None,
+                "error": str(result.info),
+                "traceback": result.traceback if hasattr(result, 'traceback') else None
             })
-        
-        result = {
-            'total_workers': total_workers,
-            'online_workers': total_workers,
-            'total_active_tasks': total_active_tasks,
-            'workers': workers,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-        # Cache the result
-        _worker_stats_cache = result
-        _worker_stats_cache_time = now
-        
-        return result
-        
-    except Exception as e:
-        # If error, return cached data if available
-        if _worker_stats_cache is not None:
-            return _worker_stats_cache
-        raise HTTPException(status_code=500, detail=f"Error fetching quick stats: {str(e)}")
-
-
-@router.get("/workers/stats")
-async def get_workers_stats():
-    """Get detailed statistics for all workers (slower, comprehensive)"""
-    try:
-        inspect = get_celery_inspect()
-        
-        # Get all worker info
-        active = inspect.active() or {}
-        stats = inspect.stats() or {}
-        registered = inspect.registered() or {}
-        active_queues = inspect.active_queues() or {}
-        
-        workers = []
-        for worker_name in stats.keys():
-            worker_stats = stats.get(worker_name, {})
-            worker_active_tasks = active.get(worker_name, [])
-            worker_registered = registered.get(worker_name, [])
-            worker_queues = active_queues.get(worker_name, [])
-            
-            workers.append({
-                'name': worker_name,
-                'status': 'online',
-                'active_tasks': len(worker_active_tasks),
-                'tasks': worker_active_tasks,
-                'registered_tasks': len(worker_registered),
-                'queues': [q['name'] for q in worker_queues],
-                'pool': worker_stats.get('pool', {}),
-                'total_tasks': worker_stats.get('total', {}),
-                'rusage': worker_stats.get('rusage', {})
-            })
-        
-        return {
-            'total_workers': len(workers),
-            'online_workers': len(workers),
-            'workers': workers,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching worker stats: {str(e)}")
-
-
-@router.get("/tasks/stats")
-async def get_tasks_stats():
-    """Get task statistics"""
-    try:
-        inspect = get_celery_inspect()
-        
-        # Get scheduled, active, and reserved tasks
-        scheduled = inspect.scheduled() or {}
-        active = inspect.active() or {}
-        reserved = inspect.reserved() or {}
-        
-        total_scheduled = sum(len(tasks) for tasks in scheduled.values())
-        total_active = sum(len(tasks) for tasks in active.values())
-        total_reserved = sum(len(tasks) for tasks in reserved.values())
-        
-        # Get queue lengths from Redis
-        queue_lengths = {}
-        for key in redis_client.keys('celery'):
-            if key:
-                length = redis_client.llen(key)
-                queue_lengths[key] = length
-        
-        return {
-            'scheduled': total_scheduled,
-            'active': total_active,
-            'reserved': total_reserved,
-            'queues': queue_lengths,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching task stats: {str(e)}")
-
-
-@router.get("/workers/active-tasks")
-async def get_active_tasks():
-    """Get all currently active tasks across workers"""
-    try:
-        inspect = get_celery_inspect()
-        active = inspect.active() or {}
-        
-        all_tasks = []
-        for worker_name, tasks in active.items():
-            for task in tasks:
-                all_tasks.append({
-                    'worker': worker_name,
-                    'task_id': task.get('id'),
-                    'task_name': task.get('name'),
-                    'args': task.get('args'),
-                    'kwargs': task.get('kwargs'),
-                    'time_start': task.get('time_start'),
-                    'acknowledged': task.get('acknowledged', False),
-                    'delivery_info': task.get('delivery_info', {})
-                })
-        
-        return {
-            'total': len(all_tasks),
-            'tasks': all_tasks,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching active tasks: {str(e)}")
-
-
-@router.get("/workers/ping")
-async def ping_workers():
-    """Ping all workers to check availability"""
-    try:
-        from celery import Celery
-        
-        celery_app = Celery('fiyatradari')
-        celery_app.config_from_object({
-            'broker_url': 'redis://redis:6379/0',
-            'result_backend': 'redis://redis:6379/1',
-        })
-        
-        # Ping with timeout
-        pong = celery_app.control.ping(timeout=1.0)
-        
-        workers = []
-        for response in pong:
-            for worker_name, info in response.items():
-                workers.append({
-                    'name': worker_name,
-                    'status': 'online',
-                    'response_time_ms': info.get('ok', 'pong')
-                })
-        
-        return {
-            'total': len(workers),
-            'workers': workers,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error pinging workers: {str(e)}")
-
-
-@router.get("/system/health")
-async def get_system_health():
-    """Get overall system health"""
-    try:
-        inspect = get_celery_inspect()
-        
-        # Get stats
-        stats = inspect.stats() or {}
-        active = inspect.active() or {}
-        
-        total_workers = len(stats)
-        total_active_tasks = sum(len(tasks) for tasks in active.values())
-        
-        # Redis health
-        redis_info = redis_client.info()
-        redis_memory = redis_info.get('used_memory_human', 'N/A')
-        redis_connected_clients = redis_info.get('connected_clients', 0)
-        
-        # Calculate health score
-        health_score = 100
-        if total_workers < 10:
-            health_score -= 20
-        if total_active_tasks > 100:
-            health_score -= 10
-        
-        status = 'healthy' if health_score >= 80 else 'degraded' if health_score >= 60 else 'unhealthy'
-        
-        return {
-            'status': status,
-            'health_score': health_score,
-            'workers': {
-                'total': total_workers,
-                'online': total_workers,
-                'offline': 0
-            },
-            'tasks': {
-                'active': total_active_tasks
-            },
-            'redis': {
-                'memory_used': redis_memory,
-                'connected_clients': redis_connected_clients
-            },
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        return {
-            'status': 'unhealthy',
-            'health_score': 0,
-            'error': str(e),
-            'timestamp': datetime.utcnow().isoformat()
-        }
-
-
-@router.post("/workers/control/shutdown/{worker_name}")
-async def shutdown_worker(worker_name: str):
-    """Shutdown a specific worker"""
-    try:
-        from celery import Celery
-        
-        celery_app = Celery('fiyatradari')
-        celery_app.config_from_object({
-            'broker_url': 'redis://redis:6379/0',
-            'result_backend': 'redis://redis:6379/1',
-        })
-        
-        celery_app.control.shutdown(destination=[worker_name])
-        
-        return {
-            'status': 'success',
-            'message': f'Shutdown signal sent to {worker_name}',
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error shutting down worker: {str(e)}")
-
-
-@router.post("/workers/control/pool-restart/{worker_name}")
-async def restart_worker_pool(worker_name: str):
-    """Restart worker pool"""
-    try:
-        from celery import Celery
-        
-        celery_app = Celery('fiyatradari')
-        celery_app.config_from_object({
-            'broker_url': 'redis://redis:6379/0',
-            'result_backend': 'redis://redis:6379/1',
-        })
-        
-        celery_app.control.pool_restart(destination=[worker_name])
-        
-        return {
-            'status': 'success',
-            'message': f'Pool restart signal sent to {worker_name}',
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error restarting worker pool: {str(e)}")
+    
+    return {
+        "total": len(failed),
+        "tasks": failed
+    }

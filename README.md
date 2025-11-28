@@ -1,6 +1,6 @@
-# Fiyat Radarı - Amazon Price Tracker
+# Fiyat Radarı
 
-Amazon ürünlerinin fiyatlarını takip eden, indirimleri tespit eden ve Telegram + web sitesi üzerinden paylaşan kapsamlı bir platform.
+Amazon ürün fiyat takip ve fırsat platformu.
 
 ## 🏗️ Proje Yapısı
 
@@ -10,132 +10,85 @@ fiyatradari/
 │   ├── app/
 │   │   ├── api/         # API endpoints
 │   │   ├── core/        # Configuration & security
-│   │   ├── db/          # Database models & migrations
-│   │   ├── services/    # Business logic
+│   │   ├── db/          # Database models
 │   │   └── schemas/     # Pydantic schemas
-│   ├── requirements.txt
-│   └── Dockerfile
-├── worker/              # Background job runner
-│   ├── jobs/
-│   ├── requirements.txt
 │   └── Dockerfile
 ├── admin-panel/         # Next.js admin panel
-├── public-web/          # Next.js public website
-├── docker-compose.yml   # Local development
-└── docs/                # Documentation
+├── web/                 # Next.js public website
+└── docker-compose.yml
 ```
 
 ## 🚀 Teknolojiler
 
 - **Backend:** Python 3.11 + FastAPI
 - **Database:** PostgreSQL 15
-- **Admin Panel:** Next.js 14 + TypeScript + TailwindCSS + shadcn/ui
-- **Public Web:** Next.js 14 + TypeScript + TailwindCSS
-- **Worker:** Python (custom job runner)
-- **API Integration:** Amazon Product Advertising API 5.0
-- **Notifications:** Telegram Bot API
+- **Cache:** Redis 7
+- **Admin Panel:** Next.js 14 + TypeScript + shadcn/ui
+- **Web:** Next.js 14 + TypeScript
+- **Reverse Proxy:** Nginx
 
 ## 📋 Özellikler
 
 ### Backend API
 - Ürün yönetimi (CRUD)
-- Kategori yönetimi ve Amazon node eşleştirme
-- Fiyat geçmişi ve fırsat tespiti
+- Kategori yönetimi
+- Fiyat geçmişi ve fırsat yönetimi
 - Kullanıcı yönetimi ve authentication
-- Amazon PA API proxy
-- Telegram entegrasyonu
-- Health check & monitoring
-
-### Worker System
-- Kategori bazlı ürün fetching (Amazon PA API)
-- Fiyat güncelleme ve takip
-- Fırsat tespiti (indirim algılama)
-- Telegram bildirimleri
-- Otomatik görev planlama
+- Amazon PA API entegrasyonu
+- Redis cache
 
 ### Admin Panel
-- Dashboard (istatistikler, grafikler)
-- Kategori yönetimi (Amazon browse nodes)
-- Ürün yönetimi ve filtreleme
-- Fiyat geçmişi görselleştirme
-- Fırsat/indirim yönetimi
-- Telegram ayarları ve test
-- Amazon API ayarları
-- Kullanıcı yönetimi
-- Sistem sağlığı & servis durumu
-- Genel ayarlar
+- **Dashboard:** İstatistikler ve sistem özeti
+- **Kategori Yönetimi:** Amazon browse node eşleştirme
+- **Ürün Yönetimi:** Ürün CRUD işlemleri ve filtreleme
+- **Fırsat Yönetimi:** İndirim fırsatlarını görüntüleme ve düzenleme
+- **Kullanıcı Yönetimi:** Admin kullanıcıları yönetme
+- **Ayarlar (Settings):**
+  - **Amazon API Tab:** Access key, secret key, partner tag, region ayarları
+  - **Telegram Tab:** Bot token, channel ID ve mesaj şablonu editörü
+  - **Proxy Tab:** Proxy ayarları (host, port, username, password, rotation list)
+  - Tek kaydet butonu ile tüm değişiklikleri kaydetme
+  - Gizli alanları göster/gizle özelliği
+  - Yeni ayar ekleme dialog'u
+  - Gerçek zamanlı değişiklik takibi
 
 ### Public Website
-- SEO optimize edilmiş fırsat listesi
-- Kategori bazlı filtreleme
+- Fırsat listesi
+- Kategori filtreleme
 - Ürün detay sayfaları
-- Fiyat grafikleri
-- Amazon affiliate linkleri
-- Responsive tasarım
+- SEO optimize
 
 ## 🛠️ Local Development
 
 ### Prerequisites
 - Docker & Docker Compose
-- Node.js 18+ (admin panel ve public web için)
-- Python 3.11+ (backend geliştirme için)
 
 ### İlk Kurulum
 
 ```bash
-# Repository clone
-git clone <repo-url>
-cd fiyatradari
-
-# Environment variables
-cp .env.example .env
-# .env dosyasını düzenleyin
-
 # Docker ile tüm servisleri başlat
 docker-compose up -d
 
-# Database migration
-docker-compose exec backend alembic upgrade head
-
 # Admin kullanıcı oluştur
-docker-compose exec backend python -m app.db.init_db
+docker-compose exec backend python create_admin.py
 ```
 
 ### Servisler
 
 - **Backend API:** http://localhost:8000
 - **Admin Panel:** http://localhost:3001
-- **Public Web:** http://localhost:3000
-- **PostgreSQL:** localhost:5432
+- **Web:** http://localhost:3000
 - **API Docs:** http://localhost:8000/docs
-
-## 🌐 Production Deployment
-
-### Domain Yapısı
-- `api.firsatradari.com` - Backend API
-- `admin.firsatradari.com` - Admin Panel
-- `firsatradari.com` - Public Website
-
-### Server Requirements (Ubuntu 22.04 LTS)
-- 2+ CPU cores
-- 4GB+ RAM
-- 20GB+ disk space
-- Docker & Docker Compose
-
-Deployment detayları için `docs/deployment.md` dosyasına bakın.
 
 ## 🔑 Environment Variables
 
-Backend için gerekli environment variables:
-
 ```env
 # Database
-DATABASE_URL=postgresql://user:password@localhost:5432/fiyatradari
+DATABASE_URL=postgresql://user:password@postgres:5432/fiyatradari
 
 # API Security
-SECRET_KEY=your-secret-key-here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+SECRET_KEY=your-secret-key
+ACCESS_TOKEN_EXPIRE_MINUTES=10080
 
 # Amazon PA API
 AMAZON_ACCESS_KEY=your-access-key
@@ -146,34 +99,40 @@ AMAZON_REGION=eu-west-1
 # Telegram
 TELEGRAM_BOT_TOKEN=your-bot-token
 TELEGRAM_CHANNEL_ID=your-channel-id
-
-# CORS
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
 ```
+
+> **Not:** Proxy ayarları admin panel Settings sayfasından dinamik olarak yönetilir. Environment variable olarak tanımlanmaz.
+
+## ⚙️ Settings Sayfası Kullanımı
+
+Admin panel'de **Ayarlar** sayfası sistem konfigürasyonunu yönetir:
+
+### Amazon API Ayarları
+- Access Key, Secret Key, Partner Tag ve Region ayarlarını girin
+- Ayarlar veritabanında saklanır ve API çağrılarında kullanılır
+
+### Telegram Bot Ayarları
+- Bot Token ve Channel ID bilgilerini girin
+- **Mesaj Şablonu Editörü:**
+  - Telegram bildirim şablonunu özelleştirin
+  - Önizleme özelliği ile gerçek veri ile test edin
+  - Desteklenen değişkenler: `{title}`, `{brand_line}`, `{discount_percentage}`, `{original_price}`, `{deal_price}`, `{discount_amount}`, `{rating_line}`, `{product_url}`
+
+### Proxy Ayarları
+- **Yeni Ayar Ekle** butonu ile proxy konfigürasyonu ekleyin
+- Desteklenen ayarlar:
+  - `proxy_enabled`: Proxy kullanımını aktif/pasif etme (true/false)
+  - `http_proxy`: Tek proxy adresi (format: `http://user:pass@proxy.com:8080`)
+  - `proxy_list`: Virgülle ayrılmış proxy listesi (rotation için)
+  - `proxy_host`, `proxy_port`, `proxy_username`, `proxy_password`: Premium proxy authentication
+
+### Özellikler
+- **Tek Kaydet Butonu:** Tüm değişiklikleri tek seferde kaydedin
+- **Değişiklik Takibi:** Sadece değiştirilen ayarlar kaydedilir
+- **Gizli Alan Maskeleme:** Şifre/token alanlarını gizleyin/gösterin
+- **Tab Yapısı:** Organize edilmiş grup bazlı ayarlar
 
 ## 📚 API Documentation
 
-Backend çalıştığında otomatik dokümantasyon:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
-
-## 🤝 Contributing
-
-1. Feature branch oluştur (`git checkout -b feature/amazing-feature`)
-2. Değişikliklerini commit et (`git commit -m 'Add some amazing feature'`)
-3. Branch'i push et (`git push origin feature/amazing-feature`)
-4. Pull Request aç
-
-## 📄 License
-
-MIT License - detaylar için `LICENSE` dosyasına bakın.
-
-## 👥 Team
-
-- Backend & Worker: Python/FastAPI
-- Frontend: Next.js/TypeScript
-- DevOps: Docker/Ubuntu
-
-## 📞 Support
-
-Sorularınız için: support@firsatradari.com

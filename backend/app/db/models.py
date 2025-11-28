@@ -65,6 +65,7 @@ class Category(Base):
     # Tracking settings
     check_interval_hours = Column(Integer, default=6)
     max_products = Column(Integer, default=100)
+    last_checked_at = Column(DateTime, nullable=True)  # Son ürün çekme zamanı
     
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -112,6 +113,9 @@ class Product(Base):
     # Ratings
     rating = Column(Float)
     review_count = Column(Integer)
+    
+    # Barcode
+    ean = Column(String(20))  # European Article Number (barkod)
     
     # Amazon data (JSON)
     amazon_data = Column(JSON, default={})
@@ -181,11 +185,18 @@ class Deal(Base):
     description = Column(Text)
     
     # Price information
-    original_price = Column(Numeric(10, 2), nullable=False)
-    deal_price = Column(Numeric(10, 2), nullable=False)
+    original_price = Column(Numeric(10, 2), nullable=False)  # Önceki fiyat
+    deal_price = Column(Numeric(10, 2), nullable=False)  # İndirimli fiyat
     discount_amount = Column(Numeric(10, 2), nullable=False)
     discount_percentage = Column(Float, nullable=False)
     currency = Column(String(3), default="TRY")
+    previous_price = Column(Numeric(10, 2))  # Price history'deki son fiyat
+    
+    # Cheapest price flags (en ucuz fiyat bayrakları)
+    is_cheapest_14days = Column(Boolean, default=False)  # Son 14 günün en ucuzu
+    is_cheapest_1month = Column(Boolean, default=False)  # Son 1 ayın en ucuzu
+    is_cheapest_3months = Column(Boolean, default=False)  # Son 3 ayın en ucuzu
+    is_cheapest_6months = Column(Boolean, default=False)  # Son 6 ayın en ucuzu
     
     # Status
     is_active = Column(Boolean, default=True, index=True)
@@ -231,40 +242,3 @@ class SystemSetting(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
-
-class WorkerLog(Base):
-    """Worker job execution logs"""
-    __tablename__ = "worker_logs"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    job_name = Column(String(100), nullable=False, index=True)
-    job_type = Column(String(50), nullable=False)  # fetch_products, check_prices, send_telegram, etc.
-    
-    # Status
-    status = Column(String(20), nullable=False, index=True)  # pending, running, completed, failed
-    
-    # Execution details
-    started_at = Column(DateTime)
-    completed_at = Column(DateTime)
-    duration_seconds = Column(Integer)
-    
-    # Results
-    items_processed = Column(Integer, default=0)
-    items_created = Column(Integer, default=0)
-    items_updated = Column(Integer, default=0)
-    items_failed = Column(Integer, default=0)
-    
-    # Error details
-    error_message = Column(Text)
-    error_trace = Column(Text)
-    
-    # Additional data
-    job_metadata = Column(JSON, default={})
-    
-    created_at = Column(DateTime, default=func.now())
-    
-    # Indexes
-    __table_args__ = (
-        Index('ix_worker_logs_job_status', 'job_name', 'status'),
-        Index('ix_worker_logs_created_at', 'created_at'),
-    )

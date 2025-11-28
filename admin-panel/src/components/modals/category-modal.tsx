@@ -432,6 +432,20 @@ export function CategoryModal({ open, onOpenChange, category, onSuccess }: Categ
                     placeholder="6"
                   />
                 </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="display_order_basic">Sıralama</Label>
+                  <Input
+                    id="display_order_basic"
+                    type="number"
+                    value={formData.display_order}
+                    onChange={(e) => setFormData({ ...formData, display_order: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Küçük sayılar önce gösterilir
+                  </p>
+                </div>
               </div>
             </TabsContent>
 

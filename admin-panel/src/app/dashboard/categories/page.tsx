@@ -82,6 +82,17 @@ export default function CategoriesPage() {
       }
     })
 
+    // Sort by display_order
+    const sortByOrder = (categories: Category[]) => {
+      categories.sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+      categories.forEach(cat => {
+        if (cat.children && cat.children.length > 0) {
+          sortByOrder(cat.children)
+        }
+      })
+    }
+    sortByOrder(roots)
+
     return roots
   }
 
@@ -225,6 +236,9 @@ export default function CategoriesPage() {
             '-'
           )}
         </TableCell>
+        <TableCell className="text-center">
+          <span className="font-semibold text-gray-700">{category.display_order || 0}</span>
+        </TableCell>
         <TableCell className="text-center">{category.product_count || 0}</TableCell>
         <TableCell className="text-center">{category.active_deal_count || 0}</TableCell>
         <TableCell className="text-center">
@@ -318,6 +332,7 @@ export default function CategoriesPage() {
                 <TableHead>Kategori Adı</TableHead>
                 <TableHead>Slug</TableHead>
                 <TableHead>Amazon Node ID</TableHead>
+                <TableHead className="text-center">Sıralama</TableHead>
                 <TableHead className="text-center">Ürün Sayısı</TableHead>
                 <TableHead className="text-center">Aktif Fırsatlar</TableHead>
                 <TableHead className="text-center">Durum</TableHead>
@@ -327,7 +342,7 @@ export default function CategoriesPage() {
             <TableBody>
               {treeData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={8} className="text-center text-gray-500 py-8">
                     Henüz kategori eklenmemiş
                   </TableCell>
                 </TableRow>
