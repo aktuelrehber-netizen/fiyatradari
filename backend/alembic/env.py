@@ -12,8 +12,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Import your models
-from app.core.database import Base
-from app import models
+from app.db.base import Base
+from app.db import models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
