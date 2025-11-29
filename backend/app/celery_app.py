@@ -32,10 +32,10 @@ celery_app.conf.update(
 
 # Beat schedule - Scheduled tasks
 celery_app.conf.beat_schedule = {
-    # Günde 1 kere kategori kontrolü - Akşam 20:00
+    # Günde 1 kere kategori kontrolü - Akşam 22:00
     'check-categories-for-update': {
         'task': 'app.tasks.check_categories_for_update',
-        'schedule': crontab(hour=20, minute=0),  # Her gün 20:00
+        'schedule': crontab(hour=22, minute=0),  # Her gün 22:00
         'options': {'expires': 3600}  # 1 saat içinde çalışmazsa expire
     },
     
