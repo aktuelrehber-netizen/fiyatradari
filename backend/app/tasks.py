@@ -32,7 +32,8 @@ class DatabaseTask(Task):
 @celery_app.task(bind=True, base=DatabaseTask, name='app.tasks.check_categories_for_update')
 def check_categories_for_update(self):
     """
-    Her dakika çalışır, güncellenecek kategorileri bulur ve fetch task'ını başlatır
+    Günde 1 kere (20:00) çalışır, güncellenecek kategorileri bulur ve fetch task'ını başlatır.
+    Manuel tetikleme de desteklenir.
     """
     logger.info("Checking categories for update...")
     
