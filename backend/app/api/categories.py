@@ -320,16 +320,12 @@ async def trigger_product_fetch(
         max_products = category.max_products or 100
         max_pages = min((max_products // 10), 10)
         
-        for browse_node in category.amazon_browse_node_ids:
-            for page in range(1, max_pages + 1):
-                celery_app.send_task(
-                    'celery_tasks.fetch_category_products',
-                    args=[category_id, browse_node, page],
-                    kwargs={},
-                    queue='product_fetch',  # Specify queue
-                    priority=8
-                )
-                tasks_dispatched += 1
+        # Her browse node için tek bir task tetikle
+        # fetch_category_products_async tüm browse node'ları işler
+        from app.tasks import fetch_category_products_async
+        
+        task = fetch_category_products_async.delay(category_id)
+        tasks_dispatched = 1
     except Exception as e:
         print(f"Error dispatching tasks: {e}")
         raise HTTPException(
@@ -346,7 +342,7 @@ async def trigger_product_fetch(
         "category_id": category_id,
         "category_name": category.name,
         "browse_nodes": len(category.amazon_browse_node_ids),
-        "pages_per_node": max_pages,
         "total_tasks": total_tasks,
-        "estimated_products": total_tasks * 10
+        "estimated_products": max_products,
+        "task_id": task.id
     }
