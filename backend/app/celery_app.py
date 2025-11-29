@@ -24,6 +24,7 @@ celery_app.conf.update(
     timezone='Europe/Istanbul',
     enable_utc=False,
     task_track_started=True,
+    result_extended=True,  # Task metadata'da name, args, kwargs'ı sakla
     task_time_limit=3600,  # 1 saat max
     task_soft_time_limit=3300,  # 55 dakika soft limit
     worker_prefetch_multiplier=1,  # Bir task'ı al, bitir, sonraki

@@ -188,10 +188,13 @@ async def recent_tasks(
         else:
             timestamp = datetime.now(istanbul_tz).isoformat()
         
+        # Task name'i al (result_extended=True ile metadata'da saklanıyor)
+        task_name = meta.get("name") or meta.get("task") or (result.name if hasattr(result, 'name') else None)
+        
         task_info = {
             "task_id": task_id,
             "status": result.state,
-            "name": meta.get("name") or (result.name if hasattr(result, 'name') else None),
+            "name": task_name,
             "ready": result.ready(),
             "successful": result.successful() if result.ready() else None,
             "date_done": timestamp,  # ISO format timestamp (Istanbul timezone)
@@ -234,10 +237,16 @@ async def failed_tasks(
         result = AsyncResult(task_id, app=celery_app)
         
         if result.state == "FAILURE":
+            # Redis'ten task metadata'yı direkt oku
+            import json
+            meta_raw = redis_client.get(key)
+            meta = json.loads(meta_raw) if meta_raw else {}
+            task_name = meta.get("name") or meta.get("task") or (result.name if hasattr(result, 'name') else None)
+            
             failed.append({
                 "task_id": task_id,
                 "status": result.state,
-                "name": result.name if hasattr(result, 'name') else None,
+                "name": task_name,
                 "error": str(result.info),
                 "traceback": result.traceback if hasattr(result, 'traceback') else None
             })
