@@ -15,15 +15,10 @@ import { X, Plus, Search, Loader2 } from 'lucide-react'
 
 interface SelectionRules {
   min_rating?: number
-  max_rating?: number
-  min_review_count?: number
   min_price?: number
   max_price?: number
   min_discount_percentage?: number
-  include_keywords?: string[]
-  exclude_keywords?: string[]
   only_prime?: boolean
-  only_deals?: boolean
 }
 
 interface Category {
@@ -71,8 +66,6 @@ export function CategoryModal({ open, onOpenChange, category, onSuccess }: Categ
   })
   
   const [newNodeId, setNewNodeId] = useState('')
-  const [newIncludeKeyword, setNewIncludeKeyword] = useState('')
-  const [newExcludeKeyword, setNewExcludeKeyword] = useState('')
   const [parentSearch, setParentSearch] = useState('')
   const [showParentDropdown, setShowParentDropdown] = useState(false)
   
@@ -127,8 +120,6 @@ export function CategoryModal({ open, onOpenChange, category, onSuccess }: Categ
       setParentSearch('')
     }
     setNewNodeId('')
-    setNewIncludeKeyword('')
-    setNewExcludeKeyword('')
   }, [category, open, categories])
 
   const loadCategories = async () => {
@@ -223,40 +214,6 @@ export function CategoryModal({ open, onOpenChange, category, onSuccess }: Categ
     setShowSearchResults(false)
   }
 
-  const addKeyword = (type: 'include' | 'exclude') => {
-    const keyword = type === 'include' ? newIncludeKeyword : newExcludeKeyword
-    if (!keyword.trim()) return
-
-    const rules = formData.selection_rules || {}
-    const existingKeywords = type === 'include' ? rules.include_keywords || [] : rules.exclude_keywords || []
-    
-    if (!existingKeywords.includes(keyword.trim())) {
-      setFormData({
-        ...formData,
-        selection_rules: {
-          ...rules,
-          [type === 'include' ? 'include_keywords' : 'exclude_keywords']: [...existingKeywords, keyword.trim()]
-        }
-      })
-    }
-    
-    if (type === 'include') setNewIncludeKeyword('')
-    else setNewExcludeKeyword('')
-  }
-
-  const removeKeyword = (type: 'include' | 'exclude', keyword: string) => {
-    const rules = formData.selection_rules || {}
-    const key = type === 'include' ? 'include_keywords' : 'exclude_keywords'
-    const keywords = rules[key] || []
-    
-    setFormData({
-      ...formData,
-      selection_rules: {
-        ...rules,
-        [key]: keywords.filter((k: string) => k !== keyword)
-      }
-    })
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -551,155 +508,89 @@ export function CategoryModal({ open, onOpenChange, category, onSuccess }: Categ
             </TabsContent>
 
             <TabsContent value="rules" className="mt-4">
-              <div className="grid grid-cols-3 gap-4">
-                <div className="grid gap-2">
-                  <Label>Min. Rating</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    max="5"
-                    value={formData.selection_rules?.min_rating || ''}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      selection_rules: { ...formData.selection_rules, min_rating: parseFloat(e.target.value) || undefined }
-                    })}
-                    placeholder="4.0"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>Min. Yorum Sayısı</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={formData.selection_rules?.min_review_count || ''}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      selection_rules: { ...formData.selection_rules, min_review_count: parseInt(e.target.value) || undefined }
-                    })}
-                    placeholder="50"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>Min. İndirim (%)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={formData.selection_rules?.min_discount_percentage || ''}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      selection_rules: { ...formData.selection_rules, min_discount_percentage: parseFloat(e.target.value) || undefined }
-                    })}
-                    placeholder="20"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>Min. Fiyat (₺)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={formData.selection_rules?.min_price || ''}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      selection_rules: { ...formData.selection_rules, min_price: parseFloat(e.target.value) || undefined }
-                    })}
-                    placeholder="100"
-                  />
-                </div>
-
-                <div className="grid gap-2">
-                  <Label>Maks. Fiyat (₺)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={formData.selection_rules?.max_price || ''}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      selection_rules: { ...formData.selection_rules, max_price: parseFloat(e.target.value) || undefined }
-                    })}
-                    placeholder="5000"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <Label className="text-sm">Prime</Label>
-                  <Switch
-                    checked={formData.selection_rules?.only_prime || false}
-                    onCheckedChange={(checked) => setFormData({
-                      ...formData,
-                      selection_rules: { ...formData.selection_rules, only_prime: checked }
-                    })}
-                  />
-                </div>
-
-                <div className="col-span-3 grid gap-2">
-                  <Label>İçermesi Gereken Kelimeler</Label>
-                  <div className="flex gap-2">
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Bu filtreler Amazon'dan ürün çekerken uygulanır
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Min. Rating</Label>
                     <Input
-                      value={newIncludeKeyword}
-                      onChange={(e) => setNewIncludeKeyword(e.target.value)}
-                      placeholder="premium, profesyonel"
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addKeyword('include'))}
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="5"
+                      value={formData.selection_rules?.min_rating || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        selection_rules: { ...formData.selection_rules, min_rating: parseFloat(e.target.value) || undefined }
+                      })}
+                      placeholder="4.0"
                     />
-                    <Button type="button" onClick={() => addKeyword('include')} size="sm">
-                      <Plus className="h-4 w-4" />
-                    </Button>
+                    <p className="text-xs text-gray-500">Amazon PA API: min_reviews_rating</p>
                   </div>
-                  {formData.selection_rules?.include_keywords && formData.selection_rules.include_keywords.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {formData.selection_rules.include_keywords.map((keyword) => (
-                        <Badge key={keyword} variant="default">
-                          {keyword}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-1 ml-1"
-                            onClick={() => removeKeyword('include', keyword)}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
 
-                <div className="col-span-3 grid gap-2">
-                  <Label>Hariç Tutulacak Kelimeler</Label>
-                  <div className="flex gap-2">
+                  <div className="grid gap-2">
+                    <Label>Min. İndirim (%)</Label>
                     <Input
-                      value={newExcludeKeyword}
-                      onChange={(e) => setNewExcludeKeyword(e.target.value)}
-                      placeholder="ikinci el, yenilenmiş"
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addKeyword('exclude'))}
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={formData.selection_rules?.min_discount_percentage || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        selection_rules: { ...formData.selection_rules, min_discount_percentage: parseFloat(e.target.value) || undefined }
+                      })}
+                      placeholder="20"
                     />
-                    <Button type="button" onClick={() => addKeyword('exclude')} size="sm">
-                      <Plus className="h-4 w-4" />
-                    </Button>
+                    <p className="text-xs text-gray-500">Amazon PA API: min_saving_percent</p>
                   </div>
-                  {formData.selection_rules?.exclude_keywords && formData.selection_rules.exclude_keywords.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {formData.selection_rules.exclude_keywords.map((keyword) => (
-                        <Badge key={keyword} variant="destructive">
-                          {keyword}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-auto p-1 ml-1"
-                            onClick={() => removeKeyword('exclude', keyword)}
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </Badge>
-                      ))}
+
+                  <div className="grid gap-2">
+                    <Label>Min. Fiyat (₺)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.selection_rules?.min_price || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        selection_rules: { ...formData.selection_rules, min_price: parseFloat(e.target.value) || undefined }
+                      })}
+                      placeholder="100"
+                    />
+                    <p className="text-xs text-gray-500">TL cinsinden (Kuruşa çevrilir)</p>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label>Maks. Fiyat (₺)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={formData.selection_rules?.max_price || ''}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        selection_rules: { ...formData.selection_rules, max_price: parseFloat(e.target.value) || undefined }
+                      })}
+                      placeholder="5000"
+                    />
+                    <p className="text-xs text-gray-500">TL cinsinden (Kuruşa çevrilir)</p>
+                  </div>
+
+                  <div className="col-span-2">
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm">Sadece Prime Ürünler</Label>
+                        <p className="text-xs text-gray-500">Amazon PA API: delivery_flags: ['Prime']</p>
+                      </div>
+                      <Switch
+                        checked={formData.selection_rules?.only_prime || false}
+                        onCheckedChange={(checked) => setFormData({
+                          ...formData,
+                          selection_rules: { ...formData.selection_rules, only_prime: checked }
+                        })}
+                      />
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
             </TabsContent>
