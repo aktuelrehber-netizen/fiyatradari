@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from decimal import Decimal
+import decimal
 
 from app.api.auth import get_current_user
 from app.db import models
@@ -377,6 +378,17 @@ def parse_amazon_item(item: Any) -> Dict[str, Any]:
     return data
 
 
+def safe_decimal(value, default=Decimal('0')) -> Decimal:
+    """Safely convert value to Decimal"""
+    if value is None:
+        return default
+    try:
+        # Convert to float first to handle various formats
+        return Decimal(str(float(value)))
+    except (ValueError, TypeError, decimal.InvalidOperation):
+        return default
+
+
 def upsert_product(
     amazon_item: Dict[str, Any],
     category_id: int,
@@ -389,7 +401,7 @@ def upsert_product(
     asin = amazon_item["asin"]
     new_price = amazon_item.get("current_price")
     
-    if not new_price:
+    if not new_price or new_price == 0:
         return {"action": "skipped", "deal": None, "deal_action": None}
     
     # Ürün var mı?
@@ -403,8 +415,8 @@ def upsert_product(
         # Ürün bilgilerini güncelle
         product.title = amazon_item.get("title") or product.title
         product.brand = amazon_item.get("brand") or product.brand
-        product.current_price = Decimal(str(new_price))
-        product.list_price = Decimal(str(amazon_item.get("list_price", new_price)))
+        product.current_price = safe_decimal(new_price, product.current_price)
+        product.list_price = safe_decimal(amazon_item.get("list_price", new_price), product.list_price)
         product.image_url = amazon_item.get("image_url") or product.image_url
         product.detail_page_url = amazon_item.get("detail_page_url") or product.detail_page_url
         product.availability = amazon_item.get("availability")
@@ -442,8 +454,8 @@ def upsert_product(
             title=amazon_item.get("title", "Unknown"),
             brand=amazon_item.get("brand"),
             category_id=category_id,
-            current_price=Decimal(str(new_price)),
-            list_price=Decimal(str(amazon_item.get("list_price", new_price))),
+            current_price=safe_decimal(new_price),
+            list_price=safe_decimal(amazon_item.get("list_price", new_price)),
             image_url=amazon_item.get("image_url"),
             detail_page_url=amazon_item.get("detail_page_url"),
             availability=amazon_item.get("availability"),
