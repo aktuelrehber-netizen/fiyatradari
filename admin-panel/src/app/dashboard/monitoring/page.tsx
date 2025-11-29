@@ -363,7 +363,7 @@ export default function MonitoringPage() {
             <div className="border rounded-lg p-4 bg-blue-50">
               <h3 className="font-medium mb-2">Toplu Ürün Güncelleme</h3>
               <p className="text-sm text-gray-600 mb-4">
-                Son 2 saat içinde güncellenmemiş ürünlerin fiyat, stok, rating bilgilerini günceller (max 500 ürün/çalışma)
+                Son 30 dakika içinde güncellenmemiş ürünlerin fiyat, stok, rating bilgilerini günceller (max 500 ürün/çalışma)
               </p>
               <Button
                 onClick={() => triggerTask('update_product_prices_batch')}
@@ -527,10 +527,13 @@ export default function MonitoringPage() {
                                       {task.result.products_updated !== undefined && (
                                         <div>🔄 <span className="font-semibold">{task.result.products_updated}</span> ürün güncellendi</div>
                                       )}
-                                      {task.result.deals_created !== undefined && task.result.deals_created > 0 && (
+                                      {(task.result.products_skipped ?? 0) > 0 && (
+                                        <div className="text-yellow-600">⏭️ <span className="font-semibold">{task.result.products_skipped}</span> ürün atlandı</div>
+                                      )}
+                                      {(task.result.deals_created ?? 0) > 0 && (
                                         <div className="text-orange-600">🎉 <span className="font-semibold">{task.result.deals_created}</span> deal oluşturuldu</div>
                                       )}
-                                      {task.result.deals_updated !== undefined && task.result.deals_updated > 0 && (
+                                      {(task.result.deals_updated ?? 0) > 0 && (
                                         <div className="text-orange-600">📝 <span className="font-semibold">{task.result.deals_updated}</span> deal güncellendi</div>
                                       )}
                                       {task.result.total_found !== undefined && (
@@ -572,13 +575,13 @@ export default function MonitoringPage() {
                                     <div className="border-l-2 border-blue-500 pl-2">
                                       <div className="font-semibold text-blue-700">Toplu Ürün Güncelleme</div>
                                       <div>✅ <span className="font-semibold">{task.result.updated_products}</span> / {task.result.total_products} ürün güncellendi</div>
-                                      {task.result.deals_created > 0 && (
+                                      {(task.result.deals_created ?? 0) > 0 && (
                                         <div className="text-orange-600">🎉 <span className="font-semibold">{task.result.deals_created}</span> yeni deal</div>
                                       )}
-                                      {task.result.deals_updated > 0 && (
+                                      {(task.result.deals_updated ?? 0) > 0 && (
                                         <div className="text-orange-600">📝 <span className="font-semibold">{task.result.deals_updated}</span> deal güncellendi</div>
                                       )}
-                                      {task.result.failed_products > 0 && (
+                                      {(task.result.failed_products ?? 0) > 0 && (
                                         <div className="text-red-600">❌ <span className="font-semibold">{task.result.failed_products}</span> başarısız</div>
                                       )}
                                     </div>

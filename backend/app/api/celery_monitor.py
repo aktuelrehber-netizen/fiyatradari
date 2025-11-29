@@ -90,7 +90,8 @@ async def trigger_task(
         "check_categories": "app.tasks.check_categories_for_update",
         "update_statistics": "app.tasks.update_statistics",
         "cleanup_deals": "app.tasks.cleanup_old_deals",
-        "check_deal_prices": "app.tasks.check_deal_prices"
+        "check_deal_prices": "app.tasks.check_deal_prices",
+        "update_product_prices_batch": "app.tasks.update_product_prices_batch"
     }
     
     if task_name not in task_map:
