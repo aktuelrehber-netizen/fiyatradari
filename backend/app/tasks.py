@@ -213,14 +213,14 @@ def check_deal_prices(self):
 def update_product_prices_batch(self):
     """
     Database'deki aktif ürünlerin fiyat, stok, rating bilgilerini güncelle
-    Son 2 saat içinde güncellenmemiş ürünleri seç ve 10'arlı batch'lerle Amazon'dan çek
+    Son 30 dakika içinde güncellenmemiş ürünleri seç ve 10'arlı batch'lerle Amazon'dan çek
     """
     logger.info("Starting batch product price update...")
     
     now = datetime.now()
-    threshold = now - timedelta(hours=2)
+    threshold = now - timedelta(minutes=30)
     
-    # Son 2 saat içinde güncellenmemiş aktif ürünleri al
+    # Son 30 dakika içinde güncellenmemiş aktif ürünleri al
     products = self.db.query(models.Product).filter(
         models.Product.is_active == True,
         models.Product.last_checked_at < threshold
