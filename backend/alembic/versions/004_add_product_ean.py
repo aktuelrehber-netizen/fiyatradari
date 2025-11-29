@@ -1,7 +1,7 @@
 """add product ean column
 
 Revision ID: 004_add_product_ean
-Revises: 003_update_category_multi_nodes
+Revises: 003
 Create Date: 2024-11-25 17:54:00
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '004_add_product_ean'
-down_revision = '003_update_category_multi_nodes'
+down_revision = '003'
 branch_labels = None
 depends_on = None
 
