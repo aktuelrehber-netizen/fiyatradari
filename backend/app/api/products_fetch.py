@@ -120,30 +120,40 @@ def fetch_category_products_logic(category_id: int, db: Session) -> Dict[str, An
             
             # Ürünleri işle
             for item_data in items:
-                result = upsert_product(
-                    amazon_item=item_data,
-                    category_id=category_id,
-                    category=category,
-                    db=db
-                )
-                
-                if result["action"] == "created":
-                    stats["products_created"] += 1
-                elif result["action"] == "updated":
-                    stats["products_updated"] += 1
-                else:
+                try:
+                    result = upsert_product(
+                        amazon_item=item_data,
+                        category_id=category_id,
+                        category=category,
+                        db=db
+                    )
+                    
+                    if result["action"] == "created":
+                        stats["products_created"] += 1
+                    elif result["action"] == "updated":
+                        stats["products_updated"] += 1
+                    else:
+                        stats["products_skipped"] += 1
+                    
+                    # Deal detection
+                    if result["deal"]:
+                        if result["deal_action"] == "created":
+                            stats["deals_created"] += 1
+                        elif result["deal_action"] == "updated":
+                            stats["deals_updated"] += 1
+                except Exception as e:
+                    # Ürün işleme hatası, logla ve devam et
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Error processing item {item_data.get('asin', 'unknown')}: {str(e)}")
                     stats["products_skipped"] += 1
-                
-                # Deal detection
-                if result["deal"]:
-                    if result["deal_action"] == "created":
-                        stats["deals_created"] += 1
-                    elif result["deal_action"] == "updated":
-                        stats["deals_updated"] += 1
+                    continue
             
         except Exception as e:
-            # Node hatası, devam et
-            print(f"Error fetching node {node_id}: {str(e)}")
+            # Node hatası, logla ve devam et
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error fetching node {node_id}: {str(e)}")
             continue
     
     # Kategori last_checked_at güncelle
