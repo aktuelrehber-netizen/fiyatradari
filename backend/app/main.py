@@ -124,6 +124,16 @@ async def root():
     }
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "fiyatradari-api",
+        "version": "1.0.0"
+    }
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """Global exception handler"""
