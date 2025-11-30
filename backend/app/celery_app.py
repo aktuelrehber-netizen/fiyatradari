@@ -25,6 +25,7 @@ celery_app.conf.update(
     enable_utc=False,
     task_track_started=True,
     result_extended=True,  # Task metadata'da name, args, kwargs'ı sakla
+    broker_connection_retry_on_startup=True,  # Celery 6.0 için uyumluluk
     task_time_limit=3600,  # 1 saat max
     task_soft_time_limit=3300,  # 55 dakika soft limit
     worker_prefetch_multiplier=1,  # Bir task'ı al, bitir, sonraki
