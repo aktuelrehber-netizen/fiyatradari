@@ -10,7 +10,6 @@ interface Product {
   title: string
   brand?: string
   current_price: string
-  list_price?: string
   image_url?: string
   detail_page_url?: string
   rating?: number
@@ -116,10 +115,8 @@ export default function InfiniteProductGrid({
 
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
         {products.map((product) => {
-          const discountPercentage = product.list_price && product.current_price
-            ? ((parseFloat(product.list_price) - parseFloat(product.current_price)) / parseFloat(product.list_price) * 100)
-            : 0
-          
+          // Product'ta discount_percentage varsa deal'dir
+          const discountPercentage = (product as any).discount_percentage || 0
           const hasDiscount = discountPercentage > 0
           const buttonText = hasDiscount ? 'Fırsata Git' : 'Satın Al'
 
@@ -185,11 +182,6 @@ export default function InfiniteProductGrid({
                   <div className="text-xl font-bold text-green-600">
                     {parseFloat(product.current_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                   </div>
-                  {product.list_price && parseFloat(product.list_price) > parseFloat(product.current_price) && (
-                    <div className="text-xs text-gray-400 line-through">
-                      {parseFloat(product.list_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
-                    </div>
-                  )}
                 </div>
 
                 {/* Amazon Link */}
