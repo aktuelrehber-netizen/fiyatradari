@@ -73,20 +73,15 @@ async def list_products(
     total = query.count()
     
     # Get paginated results - Sort by: has_deal → rating → popularity → newest
-    # Left join with deals and use max(deal.id) to prioritize products with deals
-    products = query.outerjoin(
-        models.Deal,
-        (models.Deal.product_id == models.Product.id) &
-        (models.Deal.is_active == True) &
-        (models.Deal.is_published == True)
-    ).group_by(models.Product.id).order_by(
-        desc(func.coalesce(func.max(models.Deal.id), 0)),  # Deal olanlar EN ÜSTTE!
+    # ✅ NO JOIN! Deal data is denormalized in product table for performance
+    products = query.order_by(
+        desc(models.Product.has_active_deal),  # Deal olanlar EN ÜSTTE! (çok hızlı!)
         desc(func.coalesce(models.Product.rating, 0)),  # Sonra rating
         desc(models.Product.review_count),  # Sonra popularity
         desc(models.Product.updated_at)     # Son olarak newest
     ).offset(skip).limit(limit).all()
     
-    # Add deal information to products
+    # Add deal information from denormalized fields
     products_with_deals = []
     for product in products:
         product_dict = {
@@ -107,16 +102,10 @@ async def list_products(
             "last_checked_at": product.last_checked_at,
         }
         
-        # Check if product has an active deal
-        active_deal = db.query(models.Deal).filter(
-            models.Deal.product_id == product.id,
-            models.Deal.is_active == True,
-            models.Deal.is_published == True
-        ).first()
-        
-        if active_deal:
-            product_dict["previous_price"] = active_deal.previous_price
-            product_dict["discount_percentage"] = active_deal.discount_percentage
+        # ✅ Deal data is already in product table (denormalized)
+        if product.has_active_deal:
+            product_dict["previous_price"] = product.deal_previous_price
+            product_dict["discount_percentage"] = product.discount_percentage
         
         products_with_deals.append(product_dict)
     

@@ -120,6 +120,11 @@ class Product(Base):
     # Amazon data (JSON)
     amazon_data = Column(JSON, default={})
     
+    # Deal information (denormalized for performance)
+    has_active_deal = Column(Boolean, default=False, index=True)
+    discount_percentage = Column(Float)
+    deal_previous_price = Column(Numeric(10, 2))
+    
     # Tracking
     is_active = Column(Boolean, default=True)
     is_available = Column(Boolean, default=True)

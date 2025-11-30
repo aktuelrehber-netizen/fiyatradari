@@ -567,6 +567,12 @@ def check_and_create_deal(
             existing_deal.is_cheapest_3months = cheapest_flags['is_cheapest_3months']
             existing_deal.is_cheapest_6months = cheapest_flags['is_cheapest_6months']
             existing_deal.updated_at = datetime.now()
+            
+            # ✅ Ürünü güncelle (denormalized data)
+            product.has_active_deal = True
+            product.discount_percentage = discount_percentage
+            product.deal_previous_price = Decimal(str(previous_price))
+            
             return {"deal": existing_deal, "action": "updated"}
         
         return {"deal": existing_deal, "action": None}
@@ -603,6 +609,11 @@ def check_and_create_deal(
     )
     db.add(deal)
     db.flush()  # Get deal ID without committing
+    
+    # ✅ Ürünü güncelle (denormalized data for performance)
+    product.has_active_deal = True
+    product.discount_percentage = discount_percentage
+    product.deal_previous_price = Decimal(str(previous_price))
     
     # 🚀 Telegram'a gönder (otomatik)
     try:
