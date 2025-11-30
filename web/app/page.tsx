@@ -34,7 +34,7 @@ export default async function Home() {
   
   try {
     const [dealsResponse, categoriesResponse] = await Promise.allSettled([
-      api.getDeals({ limit: 8 }),
+      api.getDeals({ limit: 100 }),
       api.getCategories()
     ])
     
@@ -259,7 +259,7 @@ export default async function Home() {
                           rel="noopener noreferrer"
                           className="block w-full bg-[#FF9900] hover:bg-[#FF9900]/90 text-white text-center py-2 rounded-lg text-xs md:text-sm font-semibold transition-all hover:shadow-lg active:scale-95"
                         >
-                          Satın Al →
+                          Fırsata Git →
                         </a>
                       )}
                     </div>
