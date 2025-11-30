@@ -312,17 +312,6 @@ def parse_amazon_item(item: Any) -> Dict[str, Any]:
                         print(f"Error parsing current_price: {e}")
                         data["current_price"] = None
             
-            # List price (original)
-            if hasattr(listing, 'saving_basis') and listing.saving_basis:
-                if hasattr(listing.saving_basis, 'amount') and listing.saving_basis.amount:
-                    try:
-                        # Amazon PA API returns price directly in TL (not Kuruş)
-                        list_price_amount = float(listing.saving_basis.amount)
-                        data["list_price"] = list_price_amount
-                    except (ValueError, TypeError, AttributeError) as e:
-                        print(f"Error parsing list_price: {e}")
-                        data["list_price"] = None
-            
             # Availability
             if hasattr(listing, 'availability') and listing.availability:
                 if hasattr(listing.availability, 'message'):
@@ -416,7 +405,6 @@ def upsert_product(
         product.title = amazon_item.get("title") or product.title
         product.brand = amazon_item.get("brand") or product.brand
         product.current_price = safe_decimal(new_price, product.current_price)
-        product.list_price = safe_decimal(amazon_item.get("list_price", new_price), product.list_price)
         product.image_url = amazon_item.get("image_url") or product.image_url
         product.detail_page_url = amazon_item.get("detail_page_url") or product.detail_page_url
         product.availability = amazon_item.get("availability")
@@ -430,7 +418,7 @@ def upsert_product(
         # Fiyat geçmişi mantığı
         if price_changed:
             # 🔴 FİYAT DEĞİŞTİ → Yeni kayıt ekle
-            add_price_history(product, new_price, amazon_item.get("list_price"), db)
+            add_price_history(product, new_price, db)
         else:
             # 🟡 FİYAT AYNI → Bugün kayıt var mı kontrol et
             last_record = get_last_price_record(product.id, db)
@@ -440,10 +428,10 @@ def upsert_product(
                 
                 if last_date < today:
                     # ✅ Bugün kayıt yok → Günlük snapshot ekle
-                    add_price_history(product, new_price, amazon_item.get("list_price"), db)
+                    add_price_history(product, new_price, db)
             else:
                 # İlk kayıt
-                add_price_history(product, new_price, amazon_item.get("list_price"), db)
+                add_price_history(product, new_price, db)
         
         action = "updated"
         
@@ -455,7 +443,6 @@ def upsert_product(
             brand=amazon_item.get("brand"),
             category_id=category_id,
             current_price=safe_decimal(new_price),
-            list_price=safe_decimal(amazon_item.get("list_price", new_price)),
             image_url=amazon_item.get("image_url"),
             detail_page_url=amazon_item.get("detail_page_url"),
             availability=amazon_item.get("availability"),
@@ -489,26 +476,14 @@ def upsert_product(
 def add_price_history(
     product: models.Product,
     price: float,
-    list_price: float | None,
     db: Session
 ):
     """Fiyat geçmişi kaydı ekle"""
-    list_price_decimal = Decimal(str(list_price)) if list_price else None
     price_decimal = Decimal(str(price))
-    
-    # İndirim hesapla
-    discount_amount = None
-    discount_percentage = None
-    if list_price and list_price > price:
-        discount_amount = Decimal(str(list_price - price))
-        discount_percentage = float((list_price - price) / list_price * 100)
     
     price_history = models.PriceHistory(
         product_id=product.id,
         price=price_decimal,
-        list_price=list_price_decimal,
-        discount_amount=discount_amount,
-        discount_percentage=discount_percentage,
         is_available=product.is_available,
         availability_status=product.availability,
         recorded_at=datetime.now()

@@ -422,7 +422,7 @@ def update_product_from_amazon(product: models.Product, amazon_data: Dict[str, A
     # Fiyat geçmişi mantığı
     if price_changed:
         # Fiyat değişti → Yeni kayıt ekle
-        add_price_history(product, new_price, amazon_data.get("list_price"), db)
+        add_price_history(product, new_price, db)
     else:
         # Fiyat aynı → Bugün kayıt var mı kontrol et (günlük snapshot)
         from app.api.products_fetch import get_last_price_record
@@ -433,10 +433,10 @@ def update_product_from_amazon(product: models.Product, amazon_data: Dict[str, A
             
             if last_date < today:
                 # Bugün kayıt yok → Günlük snapshot ekle
-                add_price_history(product, new_price, amazon_data.get("list_price"), db)
+                add_price_history(product, new_price, db)
         else:
             # İlk kayıt
-            add_price_history(product, new_price, amazon_data.get("list_price"), db)
+            add_price_history(product, new_price, db)
     
     # Deal detection
     category = product.category
