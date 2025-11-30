@@ -72,10 +72,11 @@ async def list_products(
     # Get total count
     total = query.count()
     
-    # Get paginated results - Sort by: has_deal → rating → popularity → newest
+    # Get paginated results - Sort by: has_deal → discount% → rating → popularity → newest
     # ✅ NO JOIN! Deal data is denormalized in product table for performance
     products = query.order_by(
         desc(models.Product.has_active_deal),  # Deal olanlar EN ÜSTTE! (çok hızlı!)
+        desc(func.coalesce(models.Product.discount_percentage, 0)),  # En yüksek indirim önce
         desc(func.coalesce(models.Product.rating, 0)),  # Sonra rating
         desc(models.Product.review_count),  # Sonra popularity
         desc(models.Product.updated_at)     # Son olarak newest
