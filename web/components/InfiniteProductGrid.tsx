@@ -10,6 +10,8 @@ interface Product {
   title: string
   brand?: string
   current_price: string
+  previous_price?: string
+  discount_percentage?: number
   image_url?: string
   detail_page_url?: string
   rating?: number
@@ -182,6 +184,21 @@ export default function InfiniteProductGrid({
                   <div className="text-xl font-bold text-green-600">
                     {parseFloat(product.current_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                   </div>
+                  
+                  {/* Çizili fiyat ve indirim oranı (deal varsa) */}
+                  {(product as any).previous_price && parseFloat((product as any).previous_price) > parseFloat(product.current_price) && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-gray-400 line-through">
+                        {parseFloat((product as any).previous_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
+                      </span>
+                      {discountPercentage > 0 && (
+                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5">
+                          <TrendingDown className="h-2.5 w-2.5" />
+                          -{discountPercentage.toFixed(0)}%
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Amazon Link */}

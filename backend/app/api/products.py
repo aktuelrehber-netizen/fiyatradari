@@ -72,28 +72,49 @@ async def list_products(
     # Get total count
     total = query.count()
     
-    # Get paginated results - Sort by: quality score → popularity → newest
-    # Quality Score = Rating × (1 + Discount/100)
-    # This balances quality and discount:
-    # - 5⭐ × 50% discount = 7.5 score
-    # - 4⭐ × 70% discount = 6.8 score
-    # - 5⭐ × 20% discount = 6.0 score
-    # Products with both good rating AND discount rank highest
+    # Get paginated results - Sort by: rating → popularity → newest
     products = query.order_by(
-        desc(
-            func.coalesce(models.Product.rating, 0) * 
-            (1 + func.coalesce(
-                (models.Product.list_price - models.Product.current_price) / 
-                func.nullif(models.Product.list_price, 0),
-                0
-            ))
-        ),
+        desc(func.coalesce(models.Product.rating, 0)),
         desc(models.Product.review_count),  # Popularity as tiebreaker
         desc(models.Product.updated_at)     # Newest as final tiebreaker
     ).offset(skip).limit(limit).all()
     
+    # Add deal information to products
+    products_with_deals = []
+    for product in products:
+        product_dict = {
+            "id": product.id,
+            "asin": product.asin,
+            "title": product.title,
+            "brand": product.brand,
+            "category_id": product.category_id,
+            "current_price": product.current_price,
+            "image_url": product.image_url,
+            "detail_page_url": product.detail_page_url,
+            "rating": product.rating,
+            "review_count": product.review_count,
+            "is_available": product.is_available,
+            "is_active": product.is_active,
+            "created_at": product.created_at,
+            "updated_at": product.updated_at,
+            "last_checked_at": product.last_checked_at,
+        }
+        
+        # Check if product has an active deal
+        active_deal = db.query(models.Deal).filter(
+            models.Deal.product_id == product.id,
+            models.Deal.is_active == True,
+            models.Deal.is_published == True
+        ).first()
+        
+        if active_deal:
+            product_dict["previous_price"] = active_deal.previous_price
+            product_dict["discount_percentage"] = active_deal.discount_percentage
+        
+        products_with_deals.append(product_dict)
+    
     return {
-        "items": products,
+        "items": products_with_deals,
         "total": total,
         "skip": skip,
         "limit": limit
