@@ -101,12 +101,16 @@ async def list_products(
             "created_at": product.created_at,
             "updated_at": product.updated_at,
             "last_checked_at": product.last_checked_at,
+            "has_active_deal": product.has_active_deal,  # ✅ Deal flag
         }
         
         # ✅ Deal data is already in product table (denormalized)
         if product.has_active_deal:
             product_dict["previous_price"] = product.deal_previous_price
             product_dict["discount_percentage"] = product.discount_percentage
+        else:
+            product_dict["previous_price"] = None
+            product_dict["discount_percentage"] = None
         
         products_with_deals.append(product_dict)
     
