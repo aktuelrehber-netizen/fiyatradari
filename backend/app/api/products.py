@@ -73,14 +73,14 @@ async def list_products(
     total = query.count()
     
     # Get paginated results - Sort by: has_deal → rating → popularity → newest
-    # Join with deals to prioritize products with active deals
+    # Left join with deals and use max(deal.id) to prioritize products with deals
     products = query.outerjoin(
         models.Deal,
         (models.Deal.product_id == models.Product.id) &
         (models.Deal.is_active == True) &
         (models.Deal.is_published == True)
-    ).order_by(
-        desc(models.Deal.id.isnot(None)),  # Deal olanlar EN ÜSTTE!
+    ).group_by(models.Product.id).order_by(
+        desc(func.coalesce(func.max(models.Deal.id), 0)),  # Deal olanlar EN ÜSTTE!
         desc(func.coalesce(models.Product.rating, 0)),  # Sonra rating
         desc(models.Product.review_count),  # Sonra popularity
         desc(models.Product.updated_at)     # Son olarak newest
