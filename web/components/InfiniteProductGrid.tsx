@@ -9,8 +9,8 @@ interface Product {
   asin: string
   title: string
   brand?: string
-  current_price: string
-  previous_price?: string
+  current_price: number  // ✅ API sends number
+  previous_price?: number  // ✅ API sends number
   discount_percentage?: number
   image_url?: string
   detail_page_url?: string
@@ -118,7 +118,7 @@ export default function InfiniteProductGrid({
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
         {products.map((product) => {
           // Product'ta discount_percentage varsa deal'dir
-          const discountPercentage = (product as any).discount_percentage || 0
+          const discountPercentage = product.discount_percentage || 0
           const hasDiscount = discountPercentage > 0
           const buttonText = hasDiscount ? 'Fırsata Git' : 'Satın Al'
 
@@ -182,14 +182,14 @@ export default function InfiniteProductGrid({
                 {/* Prices */}
                 <div className="mb-3">
                   <div className="text-xl font-bold text-green-600">
-                    {parseFloat(product.current_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
+                    {product.current_price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                   </div>
                   
                   {/* Çizili fiyat ve indirim oranı (deal varsa) */}
-                  {(product as any).previous_price && parseFloat((product as any).previous_price) > parseFloat(product.current_price) && (
+                  {product.previous_price && product.previous_price > product.current_price && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs text-gray-400 line-through">
-                        {parseFloat((product as any).previous_price).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
+                        {product.previous_price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₺
                       </span>
                       {discountPercentage > 0 && (
                         <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-semibold flex items-center gap-0.5">
