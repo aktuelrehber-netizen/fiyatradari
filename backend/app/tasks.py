@@ -157,16 +157,26 @@ def cleanup_old_deals(self):
     ).all()
     
     deleted_count = len(old_deals)
+    cleaned_products = 0
     
     for deal in old_deals:
+        # ✅ Eğer product'ta hala deal verisi varsa temizle
+        product = deal.product
+        if product and product.has_active_deal:
+            product.has_active_deal = False
+            product.discount_percentage = None
+            product.deal_previous_price = None
+            cleaned_products += 1
+        
         self.db.delete(deal)
     
     self.db.commit()
     
-    logger.info(f"Deleted {deleted_count} old deals")
+    logger.info(f"Deleted {deleted_count} old deals, cleaned {cleaned_products} products")
     
     return {
         "deleted_deals": deleted_count,
+        "cleaned_products": cleaned_products,
         "threshold_date": threshold.isoformat()
     }
 
@@ -194,6 +204,12 @@ def check_deal_prices(self):
         if float(product.current_price) > float(deal.deal_price):
             deal.is_active = False
             deactivated += 1
+            
+            # ✅ Ürünü güncelle (denormalized data temizle)
+            product.has_active_deal = False
+            product.discount_percentage = None
+            product.deal_previous_price = None
+            
             logger.info(
                 f"Deal {deal.id} deactivated - "
                 f"Price increased from {deal.deal_price} to {product.current_price}"
