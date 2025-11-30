@@ -1,7 +1,7 @@
 """Add deal fields to product table for performance
 
-Revision ID: 006
-Revises: 005
+Revision ID: 006_add_deal_fields_to_product
+Revises: 005_add_category_last_checked_at
 Create Date: 2025-11-30
 """
 from alembic import op
@@ -9,8 +9,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '006'
-down_revision = '005'
+revision = '006_add_deal_fields_to_product'
+down_revision = '005_add_category_last_checked_at'
 branch_labels = None
 depends_on = None
 
