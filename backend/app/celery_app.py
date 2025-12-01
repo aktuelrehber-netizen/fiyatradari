@@ -53,6 +53,13 @@ celery_app.conf.beat_schedule = {
         'schedule': crontab(hour=0, minute=0),  # 00:00
     },
     
+    # Her 1 saatte bir deal fiyatlarını kontrol et (fiyat arttıysa deaktive et)
+    'check-deal-prices': {
+        'task': 'app.tasks.check_deal_prices',
+        'schedule': 3600.0,  # 1 saat (3600 saniye)
+        'options': {'expires': 3500}  # 58 dakika içinde expire
+    },
+    
     # Her 5 dakikada bir ürün fiyatlarını güncelle (batch)
     'update-product-prices-batch': {
         'task': 'app.tasks.update_product_prices_batch',
