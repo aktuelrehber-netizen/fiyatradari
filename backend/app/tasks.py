@@ -300,7 +300,8 @@ def update_product_prices_batch(self):
         "updated_products": 0,
         "failed_products": 0,
         "deals_created": 0,
-        "deals_updated": 0
+        "deals_updated": 0,
+        "deals_deactivated": 0
     }
     
     # ASIN'leri al
@@ -345,6 +346,8 @@ def update_product_prices_batch(self):
                         stats["deals_created"] += 1
                     elif result["deal_updated"]:
                         stats["deals_updated"] += 1
+                    elif result.get("deal_deactivated"):
+                        stats["deals_deactivated"] += 1
                     
                 except Exception as e:
                     # Use self.app.log for logging inside task
@@ -365,7 +368,8 @@ def update_product_prices_batch(self):
     
     logger.info(
         f"Batch update completed: {stats['updated_products']}/{stats['total_products']} updated, "
-        f"{stats['deals_created']} deals created, {stats['deals_updated']} deals updated"
+        f"{stats['deals_created']} deals created, {stats['deals_updated']} deals updated, "
+        f"{stats['deals_deactivated']} deals deactivated"
     )
     
     return stats
@@ -461,5 +465,6 @@ def update_product_from_amazon(product: models.Product, amazon_data: Dict[str, A
     return {
         "updated": True,
         "deal_created": deal_result["action"] == "created",
-        "deal_updated": deal_result["action"] == "updated"
+        "deal_updated": deal_result["action"] == "updated",
+        "deal_deactivated": deal_result["action"] == "deactivated"
     }

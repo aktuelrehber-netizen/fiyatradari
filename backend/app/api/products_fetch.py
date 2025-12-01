@@ -536,6 +536,23 @@ def check_and_create_deal(
     # İndirim hesapla (önceki fiyata göre)
     if previous_price <= current_price:
         # Fiyat düşmemiş veya artmış
+        # ✅ Var olan aktif deal'i kontrol et ve deaktive et
+        existing_deal = db.query(models.Deal).filter(
+            models.Deal.product_id == product.id,
+            models.Deal.is_active == True
+        ).first()
+        
+        if existing_deal:
+            # Fiyat arttı, deal'i deaktive et
+            existing_deal.is_active = False
+            
+            # Ürünü güncelle (denormalized data temizle)
+            product.has_active_deal = False
+            product.discount_percentage = None
+            product.deal_previous_price = None
+            
+            return {"deal": existing_deal, "action": "deactivated"}
+        
         return {"deal": None, "action": None}
     
     discount_amount = previous_price - current_price
