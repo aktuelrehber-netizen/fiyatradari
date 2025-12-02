@@ -263,9 +263,10 @@ export default function SettingsPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="amazon" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="amazon">Amazon API</TabsTrigger>
           <TabsTrigger value="telegram">Telegram</TabsTrigger>
+          <TabsTrigger value="openai">OpenAI API</TabsTrigger>
           <TabsTrigger value="proxy">Proxy</TabsTrigger>
         </TabsList>
 
@@ -316,6 +317,49 @@ export default function SettingsPage() {
           <TelegramTemplateEditor onSave={() => {
             loadSettings()
           }} />
+        </TabsContent>
+
+        {/* OpenAI Tab */}
+        <TabsContent value="openai" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>OpenAI API</CardTitle>
+              <CardDescription>
+                OpenAI API bağlantı ayarları. GPT modelleri ile ürün açıklamaları ve içerik üretimi için kullanılır.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {groupSettings('openai').length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>OpenAI API ayarları bulunamadı</p>
+                  <p className="text-sm mt-2">API Key eklemek için aşağıdaki ayarları tanımlayın:</p>
+                  <ul className="text-xs mt-4 space-y-1">
+                    <li><strong>openai_api_key</strong> - OpenAI API Key</li>
+                    <li><strong>openai_model</strong> - Kullanılacak model (örn: gpt-4, gpt-3.5-turbo)</li>
+                    <li><strong>openai_max_tokens</strong> - Maksimum token sayısı</li>
+                  </ul>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                    <p className="text-sm text-purple-900 dark:text-purple-100">
+                      <strong>🤖 OpenAI Kullanım Alanları</strong>
+                    </p>
+                    <ul className="text-xs text-purple-700 dark:text-purple-300 mt-2 space-y-1 ml-4 list-disc">
+                      <li><strong>Ürün Açıklamaları:</strong> Otomatik ürün açıklaması oluşturma</li>
+                      <li><strong>SEO İçeriği:</strong> Meta açıklamaları ve başlıklar</li>
+                      <li><strong>Kategori Açıklamaları:</strong> Dinamik kategori içeriği</li>
+                      <li><strong>Fırsat Özetleri:</strong> Deal özetleri ve highlight'lar</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {groupSettings('openai').map(renderSettingField)}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Proxy Tab */}
@@ -387,6 +431,7 @@ export default function SettingsPage() {
                             <SelectItem value="proxy">Proxy</SelectItem>
                             <SelectItem value="amazon">Amazon</SelectItem>
                             <SelectItem value="telegram">Telegram</SelectItem>
+                            <SelectItem value="openai">OpenAI</SelectItem>
                             <SelectItem value="general">Genel</SelectItem>
                           </SelectContent>
                         </Select>
