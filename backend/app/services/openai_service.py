@@ -138,25 +138,57 @@ Sadece optimize edilmiş başlığı döndür, başka açıklama yapma."""
         Returns:
             Cleaned title
         """
+        import re
+        
         title = amazon_title
         
-        # Basic cleaning
-        # Remove common junk words
-        junk_words = [
-            "Amazon'da", "Ürün", "Satış", "Kampanya", "İndirim", 
-            "Özel Fiyat", "Hızlı Kargo", "Ücretsiz Kargo",
-            "En İyi", "Kaliteli", "Orjinal", "Garantili"
+        # Remove common junk words and phrases
+        junk_patterns = [
+            r"Amazon'?da",
+            r"Ürün\s*:",
+            r"Satış",
+            r"Kampanya",
+            r"İndirim",
+            r"Özel Fiyat",
+            r"Hızlı Kargo",
+            r"Ücretsiz Kargo",
+            r"En İyi",
+            r"Kaliteli",
+            r"Orjinal",
+            r"Orijinal",
+            r"Garantili",
+            r"\(Yeni\)",
+            r"New",
+            r"Prime",
+            r"- \d+ Adet$",  # "- 2 Adet" gibi sonlardaki adet bilgisi
         ]
         
-        for word in junk_words:
-            title = title.replace(word, "")
+        for pattern in junk_patterns:
+            title = re.sub(pattern, "", title, flags=re.IGNORECASE)
         
-        # Remove excessive spaces
-        title = " ".join(title.split())
+        # Remove extra punctuation at the end
+        title = re.sub(r'[,\-\s]+$', '', title)
+        
+        # Remove multiple spaces and dashes
+        title = re.sub(r'\s+', ' ', title)
+        title = re.sub(r'-+', '-', title)
+        
+        # Capitalize first letter of each word (title case)
+        title = title.title()
+        
+        # Fix Turkish characters (title() bozabiliyor)
+        turkish_fixes = {
+            'i̇': 'İ',
+            'İ': 'İ',
+            'I': 'I',
+        }
+        for old, new in turkish_fixes.items():
+            title = title.replace(old, new)
         
         # Limit length
         if len(title) > 100:
-            title = title[:97] + "..."
+            # Cut at word boundary
+            title = title[:97].rsplit(' ', 1)[0] + "..."
         
         return title.strip()
     
