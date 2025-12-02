@@ -624,23 +624,79 @@ def create_catalogs_batch(self, batch_size: int = 10, max_batches: int = None) -
         
         for product in products:
             try:
-                result = create_catalog_from_product.apply(args=[product.id]).get()
+                # Call function directly (not as Celery task) to avoid deadlock
+                from app.services.openai_service import OpenAIService
+                from slugify import slugify
+                
+                # Skip if already has catalog
+                if product.catalog_product_id:
+                    stats["skipped"] += 1
+                    continue
+                
+                # Initialize OpenAI service
+                openai_service = OpenAIService(self.db)
+                
+                # Optimize title
+                category_name = product.category.name if product.category else "Genel"
+                optimized_title = openai_service.optimize_product_title(
+                    amazon_title=product.title,
+                    category_name=category_name,
+                    brand=product.brand
+                )
+                
+                if not optimized_title:
+                    optimized_title = product.title
+                
+                # Generate slug
+                slug = slugify(optimized_title)
+                
+                # Check if slug exists
+                existing_slug = self.db.query(models.CatalogProduct).filter(
+                    models.CatalogProduct.slug == slug
+                ).first()
+                
+                if existing_slug:
+                    slug = f"{slug}-{product.asin.lower()}"
+                
+                # Generate meta description
+                meta_description = openai_service.generate_meta_description(
+                    product_title=optimized_title,
+                    category_name=category_name,
+                    brand=product.brand
+                )
+                
+                # Create catalog product
+                catalog_product = models.CatalogProduct(
+                    title=optimized_title,
+                    slug=slug,
+                    description=product.description,
+                    category_id=product.category_id,
+                    brand=product.brand,
+                    meta_title=optimized_title,
+                    meta_description=meta_description
+                )
+                
+                self.db.add(catalog_product)
+                self.db.flush()
+                
+                # Link product to catalog
+                product.catalog_product_id = catalog_product.id
                 
                 stats["total_processed"] += 1
+                stats["created"] += 1
                 
-                if result.get("success"):
-                    stats["created"] += 1
-                elif result.get("skipped"):
-                    stats["skipped"] += 1
-                else:
-                    stats["failed"] += 1
+                logger.info(
+                    f"Created catalog {catalog_product.id} for product {product.id}: "
+                    f"'{optimized_title}'"
+                )
                 
-                # Rate limiting - wait 1 second between products if OpenAI is enabled
+                # Rate limiting - wait 1 second between products
                 time.sleep(1)
                 
             except Exception as e:
                 logger.error(f"Error processing product {product.id}: {e}")
                 stats["failed"] += 1
+                stats["total_processed"] += 1
         
         batch_count += 1
         stats["batches"] = batch_count
