@@ -570,3 +570,58 @@ export const notificationsAPI = {
     return response.data
   },
 }
+
+// Catalog Products API
+export const catalogProductsAPI = {
+  list: async (params?: {
+    skip?: number
+    limit?: number
+    category_id?: number
+    brand?: string
+    search?: string
+  }) => {
+    const response = await apiClient.get('/catalog-products/', { params })
+    return response.data
+  },
+  
+  get: async (id: number) => {
+    const response = await apiClient.get(`/catalog-products/${id}`)
+    return response.data
+  },
+  
+  create: async (data: {
+    title: string
+    slug?: string
+    description?: string
+    category_id: number
+    brand?: string
+    meta_title?: string
+    meta_description?: string
+  }) => {
+    const response = await apiClient.post('/catalog-products/', data)
+    return response.data
+  },
+  
+  update: async (id: number, data: {
+    title?: string
+    slug?: string
+    description?: string
+    category_id?: number
+    brand?: string
+    meta_title?: string
+    meta_description?: string
+  }) => {
+    const response = await apiClient.put(`/catalog-products/${id}`, data)
+    return response.data
+  },
+  
+  delete: async (id: number) => {
+    const response = await apiClient.delete(`/catalog-products/${id}`)
+    return response.data
+  },
+  
+  getSellerProducts: async (id: number) => {
+    const response = await apiClient.get(`/catalog-products/${id}/seller-products`)
+    return response.data
+  },
+}

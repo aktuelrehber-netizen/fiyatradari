@@ -12,7 +12,8 @@ import {
   Users,
   LogOut,
   Search,
-  Server
+  Server,
+  BookOpen
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
@@ -31,6 +32,11 @@ const menuItems = [
     title: 'Ürünler',
     href: '/dashboard/products',
     icon: Package,
+  },
+  {
+    title: 'Katalog Ürünleri',
+    href: '/dashboard/catalog-products',
+    icon: BookOpen,
   },
   {
     title: 'Fırsatlar',
