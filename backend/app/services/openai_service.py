@@ -131,67 +131,43 @@ Sadece optimize edilmiş başlığı döndür, başka açıklama yapma."""
     def _fallback_title_cleaning(self, amazon_title: str, brand: Optional[str] = None) -> str:
         """
         Fallback title cleaning when OpenAI is not available
+        Minimal cleaning to preserve product information
         
         Args:
             amazon_title: Original Amazon title
             brand: Brand name
         
         Returns:
-            Cleaned title
+            Cleaned title (minimal changes)
         """
         import re
         
         title = amazon_title
         
-        # Remove common junk words and phrases
+        # Only remove obvious junk patterns (very conservative)
         junk_patterns = [
-            r"Amazon'?da",
-            r"Ürün\s*:",
-            r"Satış",
-            r"Kampanya",
-            r"İndirim",
-            r"Özel Fiyat",
-            r"Hızlı Kargo",
-            r"Ücretsiz Kargo",
-            r"En İyi",
-            r"Kaliteli",
-            r"Orjinal",
-            r"Orijinal",
-            r"Garantili",
-            r"\(Yeni\)",
-            r"New",
-            r"Prime",
-            r"- \d+ Adet$",  # "- 2 Adet" gibi sonlardaki adet bilgisi
+            r"\s*\(Yeni\)\s*$",      # " (Yeni)" at end
+            r"\s*\(\s*Yeni\s*\)\s*", # " ( Yeni )" anywhere
+            r"Amazon'?da\s*",         # "Amazon'da"
+            r"Ücretsiz\s+Kargo\s*",   # "Ücretsiz Kargo"
+            r"Hızlı\s+Kargo\s*",      # "Hızlı Kargo"
         ]
         
         for pattern in junk_patterns:
-            title = re.sub(pattern, "", title, flags=re.IGNORECASE)
+            title = re.sub(pattern, " ", title, flags=re.IGNORECASE)
         
-        # Remove extra punctuation at the end
-        title = re.sub(r'[,\-\s]+$', '', title)
-        
-        # Remove multiple spaces and dashes
+        # Clean up multiple spaces
         title = re.sub(r'\s+', ' ', title)
-        title = re.sub(r'-+', '-', title)
         
-        # Capitalize first letter of each word (title case)
-        title = title.title()
+        # Clean up extra punctuation/spaces at start and end only
+        title = title.strip(' ,-;:')
         
-        # Fix Turkish characters (title() bozabiliyor)
-        turkish_fixes = {
-            'i̇': 'İ',
-            'İ': 'İ',
-            'I': 'I',
-        }
-        for old, new in turkish_fixes.items():
-            title = title.replace(old, new)
-        
-        # Limit length
-        if len(title) > 100:
+        # Limit length if too long (preserve as much as possible)
+        if len(title) > 120:
             # Cut at word boundary
-            title = title[:97].rsplit(' ', 1)[0] + "..."
+            title = title[:117].rsplit(' ', 1)[0] + "..."
         
-        return title.strip()
+        return title
     
     def generate_meta_description(
         self, 
