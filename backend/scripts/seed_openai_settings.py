@@ -65,8 +65,8 @@ def seed_openai_settings():
         
         for setting_data in openai_settings:
             # Check if setting already exists
-            existing = db.query(models.Setting).filter(
-                models.Setting.key == setting_data["key"]
+            existing = db.query(models.SystemSetting).filter(
+                models.SystemSetting.key == setting_data["key"]
             ).first()
             
             if existing:
@@ -75,7 +75,7 @@ def seed_openai_settings():
                 continue
             
             # Create new setting
-            setting = models.Setting(**setting_data)
+            setting = models.SystemSetting(**setting_data)
             db.add(setting)
             created_count += 1
             print(f"✅ Created setting: {setting_data['key']}")
