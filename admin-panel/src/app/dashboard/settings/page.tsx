@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Switch } from '@/components/ui/switch'
 import { settingsAPI } from '@/utils/api-client'
 import { Save, Eye, EyeOff, Check, Settings as SettingsIcon, Plus } from 'lucide-react'
 import {
@@ -172,33 +173,54 @@ export default function SettingsPage() {
     return key.includes('secret') || key.includes('password') || key.includes('token')
   }
 
-  const renderSettingField = (setting: Setting) => (
-    <div key={setting.key} className="space-y-2">
-      <Label htmlFor={setting.key}>{setting.description || setting.key}</Label>
-      <Input
-        id={setting.key}
-        type={isSecretField(setting.key) && !showSecrets ? 'password' : 'text'}
-        value={formData[setting.key] || ''}
-        onChange={(e) => handleInputChange(setting.key, e.target.value)}
-        placeholder={setting.description}
-      />
-      {setting.key === 'proxy_enabled' && (
-        <p className="text-xs text-muted-foreground">
-          Proxy kullanımı: true veya false
-        </p>
-      )}
-      {setting.key === 'http_proxy' && (
-        <p className="text-xs text-muted-foreground">
-          Format: http://user:pass@proxy.com:8080
-        </p>
-      )}
-      {setting.key === 'proxy_list' && (
-        <p className="text-xs text-muted-foreground">
-          Virgülle ayrılmış liste: proxy1.com:8080,proxy2.com:8080
-        </p>
-      )}
-    </div>
-  )
+  const renderSettingField = (setting: Setting) => {
+    // Boolean field için Switch kullan
+    if (setting.data_type === 'boolean') {
+      const isChecked = formData[setting.key] === 'true'
+      
+      return (
+        <div key={setting.key} className="flex items-center justify-between space-x-2 py-2 px-4 border rounded-lg hover:bg-muted/50 transition-colors">
+          <div className="space-y-0.5">
+            <Label htmlFor={setting.key} className="text-base cursor-pointer">
+              {setting.description || setting.key}
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {setting.key}
+            </p>
+          </div>
+          <Switch
+            id={setting.key}
+            checked={isChecked}
+            onCheckedChange={(checked) => handleInputChange(setting.key, checked ? 'true' : 'false')}
+          />
+        </div>
+      )
+    }
+    
+    // String/number/text field için Input kullan
+    return (
+      <div key={setting.key} className="space-y-2">
+        <Label htmlFor={setting.key}>{setting.description || setting.key}</Label>
+        <Input
+          id={setting.key}
+          type={isSecretField(setting.key) && !showSecrets ? 'password' : 'text'}
+          value={formData[setting.key] || ''}
+          onChange={(e) => handleInputChange(setting.key, e.target.value)}
+          placeholder={setting.description}
+        />
+        {setting.key === 'http_proxy' && (
+          <p className="text-xs text-muted-foreground">
+            Format: http://user:pass@proxy.com:8080
+          </p>
+        )}
+        {setting.key === 'proxy_list' && (
+          <p className="text-xs text-muted-foreground">
+            Virgülle ayrılmış liste: proxy1.com:8080,proxy2.com:8080
+          </p>
+        )}
+      </div>
+    )
+  }
 
   if (loading) {
     return (
