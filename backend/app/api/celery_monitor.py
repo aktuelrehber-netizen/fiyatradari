@@ -91,7 +91,8 @@ async def trigger_task(
         "update_statistics": "app.tasks.update_statistics",
         "cleanup_deals": "app.tasks.cleanup_old_deals",
         "check_deal_prices": "app.tasks.check_deal_prices",
-        "update_product_prices_batch": "app.tasks.update_product_prices_batch"
+        "update_product_prices_batch": "app.tasks.update_product_prices_batch",
+        "create_catalogs_batch": "app.tasks.create_catalogs_batch"
     }
     
     if task_name not in task_map:
@@ -101,14 +102,21 @@ async def trigger_task(
             "available_tasks": list(task_map.keys())
         }
     
-    # Task'ı tetikle
-    task = celery_app.send_task(task_map[task_name])
+    # Task'ı tetikle (parametrelerle)
+    task_kwargs = {}
+    
+    # Catalog batch task için parametreler
+    if task_name == "create_catalogs_batch":
+        task_kwargs = {"batch_size": 10, "max_batches": 1}
+    
+    task = celery_app.send_task(task_map[task_name], kwargs=task_kwargs)
     
     return {
         "success": True,
         "task_name": task_name,
         "task_id": task.id,
-        "status": "sent"
+        "status": "sent",
+        "kwargs": task_kwargs
     }
 
 

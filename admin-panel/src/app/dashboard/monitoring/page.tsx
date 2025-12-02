@@ -384,6 +384,31 @@ export default function MonitoringPage() {
                 )}
               </Button>
             </div>
+
+            <div className="border rounded-lg p-4 bg-purple-50">
+              <h3 className="font-medium mb-2">🤖 Katalog Oluşturma (Batch)</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Katalog ürünü olmayan ilk 10 ürün için OpenAI ile SEO optimizasyonu yaparak katalog oluşturur
+              </p>
+              <Button
+                onClick={() => triggerTask('create_catalogs_batch')}
+                disabled={triggering === 'create_catalogs_batch'}
+                className="w-full"
+                variant="outline"
+              >
+                {triggering === 'create_catalogs_batch' ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Çalıştırılıyor...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Katalog Oluştur (10 Ürün)
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
