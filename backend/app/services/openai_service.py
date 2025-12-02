@@ -77,25 +77,30 @@ class OpenAIService:
         
         try:
             # Construct prompt
-            prompt = f"""Amazon ürün başlığını SEO'ya uygun, kısa ve net hale getir.
+            prompt = f"""Aşağıdaki Amazon ürünü için SEO'ya uygun, kullanıcı dostu bir KATALOG BAŞLIĞI oluştur.
+Orijinal başlığı olduğu gibi kullanma, yeni bir başlık yarat.
 
 Kategori: {category_name}
 {f"Marka: {brand}" if brand else ""}
-Amazon Başlığı: {amazon_title}
+Amazon Ürün Başlığı: {amazon_title}
 
-Kurallar:
-- Maksimum 100 karakter
-- Türkçe dilbilgisine uygun
-- Marka + model + ana özellik formatı
-- Gereksiz kelimeleri çıkar (örn: "Ürün", "Satış", "Kampanya")
-- Anahtar kelimeleri önde tut
-- Büyük harf kullanımını düzelt
-- Özel karakterleri temizle
+KURALLAR:
+1. Maksimum 100 karakter
+2. Marka + Model/Özellik + Beden/Renk formatı kullan
+3. Arama motorları için optimize et (anahtar kelimeler önde)
+4. Gereksiz kelimeleri çıkar: "Ürün", "Satış", "Kampanya", "(Yeni)", "Amazon'da"
+5. Virgülleri tire (-) ile değiştir
+6. Türkçe büyük/küçük harf kurallarına uy
+7. Net ve anlaşılır olsun
 
-Örnek:
-"Nespresso Inissia Kapsüllü Kahve Makinesi - Siyah"
+İYİ ÖRNEKLER:
+❌ "Philips HD7431/20 Daily Collection Filtre Kahve Makinesi 1000W Siyah/Kırmızı Ürün ( Yeni )"
+✅ "Philips Daily Collection HD7431/20 Filtre Kahve Makinesi - 1000W"
 
-Sadece optimize edilmiş başlığı döndür, başka açıklama yapma."""
+❌ "adidas ALPHAEDGE + Kadın Spor Ayakkabı, shadow fig, 38"
+✅ "Adidas Alphaedge+ Kadın Spor Ayakkabı - Shadow Fig - 38 Numara"
+
+Sadece yeni katalog başlığını döndür, başka açıklama yapma."""
 
             # Call OpenAI API (v1.0+ client)
             response = self.client.chat.completions.create(
@@ -103,7 +108,7 @@ Sadece optimize edilmiş başlığı döndür, başka açıklama yapma."""
                 messages=[
                     {
                         "role": "system",
-                        "content": "Sen bir e-ticaret SEO uzmanısın. Ürün başlıklarını optimize ederken kullanıcı dostu ve arama motorları için uygun hale getiriyorsun."
+                        "content": "Sen bir e-ticaret SEO uzmanısın. Amazon ürün başlıklarını alıp, katalog siteleri için SEO'ya uygun YENİ başlıklar oluşturuyorsun. Orijinal başlıkları kopyalamıyorsun, yeniden yazıyorsun."
                     },
                     {
                         "role": "user",
@@ -190,24 +195,33 @@ Sadece optimize edilmiş başlığı döndür, başka açıklama yapma."""
             return self._fallback_meta_description(product_title, category_name, brand)
         
         try:
-            prompt = f"""Ürün için SEO meta description oluştur.
+            prompt = f"""Aşağıdaki katalog ürünü için SEO'ya uygun bir meta description oluştur.
 
-Ürün: {product_title}
+Ürün Başlığı: {product_title}
 Kategori: {category_name}
 {f"Marka: {brand}" if brand else ""}
 
-Kurallar:
-- Maksimum 160 karakter
-- Kullanıcıyı satın almaya teşvik etmeli
-- Anahtar kelimeleri içermeli
-- Call-to-action içermeli
+KURALLAR:
+1. Maksimum 155 karakter (Google limit)
+2. Ürünün faydalarını ve özelliklerini vurgula
+3. Arama motorları için anahtar kelimeler ekle
+4. Kullanıcıyı tıklamaya teşvik et
+5. Doğal Türkçe kullan
+6. Fiyat bilgisi ekleme
 
-Sadece meta description'ı döndür."""
+ÖRNEK:
+Ürün: "Philips Daily Collection HD7431/20 Filtre Kahve Makinesi - 1000W"
+Meta: "Philips Daily Collection filtre kahve makinesi ile her sabah taze kahve keyfi. 1000W güç, kolay temizlik. Hızlı kargo ve güvenli alışveriş."
+
+Sadece meta description'ı döndür, başka açıklama yapma."""
 
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "Sen bir SEO uzmanısın."},
+                    {
+                        "role": "system", 
+                        "content": "Sen bir e-ticaret SEO uzmanısın. Ürünler için arama motorlarında iyi sıralama alan meta description'lar yazıyorsun."
+                    },
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=200,
