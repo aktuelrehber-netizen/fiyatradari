@@ -2,7 +2,7 @@
 OpenAI Service for AI-powered features
 """
 import os
-import openai
+from openai import OpenAI
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.db import models
@@ -13,6 +13,7 @@ class OpenAIService:
     
     def __init__(self, db: Session):
         self.db = db
+        self.client = None
         self._load_settings()
     
     def _load_settings(self):
@@ -45,9 +46,9 @@ class OpenAIService:
         self.temperature = float(temperature_setting.value) if temperature_setting else 0.7
         self.enabled = enabled_setting.value == "true" if enabled_setting else False
         
-        # Configure OpenAI client
+        # Configure OpenAI client (new API v1.0+)
         if self.api_key:
-            openai.api_key = self.api_key
+            self.client = OpenAI(api_key=self.api_key)
     
     def is_enabled(self) -> bool:
         """Check if OpenAI is enabled and configured"""
@@ -96,8 +97,8 @@ Kurallar:
 
 Sadece optimize edilmiş başlığı döndür, başka açıklama yapma."""
 
-            # Call OpenAI API
-            response = openai.ChatCompletion.create(
+            # Call OpenAI API (v1.0+ client)
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -227,7 +228,7 @@ Kurallar:
 
 Sadece meta description'ı döndür."""
 
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "Sen bir SEO uzmanısın."},
