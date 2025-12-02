@@ -73,6 +73,7 @@ class Category(Base):
     # Relationships
     parent = relationship("Category", remote_side=[id], backref="subcategories")
     products = relationship("Product", back_populates="category")
+    catalog_products = relationship("CatalogProduct", back_populates="category")
     
     @property
     def product_count(self):
@@ -87,8 +88,36 @@ class Category(Base):
         return sum(1 for p in self.products for d in p.deals if d.is_active)
 
 
+class CatalogProduct(Base):
+    """Catalog products - SEO optimized product entries"""
+    __tablename__ = "catalog_products"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(500), nullable=False)  # SEO optimized title
+    slug = Column(String(500), unique=True, index=True)
+    description = Column(Text)
+    
+    # Category relationship
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
+    
+    # Brand (simple string for now)
+    brand = Column(String(255))
+    
+    # SEO
+    meta_title = Column(String(255))
+    meta_description = Column(Text)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    category = relationship("Category", back_populates="catalog_products")
+    seller_products = relationship("Product", back_populates="catalog_product")
+
+
 class Product(Base):
-    """Amazon products being tracked"""
+    """Amazon products being tracked (seller products)"""
     __tablename__ = "products"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -99,6 +128,9 @@ class Product(Base):
     
     # Category
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False, index=True)
+    
+    # Catalog product (parent)
+    catalog_product_id = Column(Integer, ForeignKey("catalog_products.id"), nullable=True, index=True)
     
     # Current pricing
     current_price = Column(Numeric(10, 2))
@@ -136,6 +168,7 @@ class Product(Base):
     
     # Relationships
     category = relationship("Category", back_populates="products")
+    catalog_product = relationship("CatalogProduct", back_populates="seller_products")
     price_history = relationship("PriceHistory", back_populates="product", cascade="all, delete-orphan")
     deals = relationship("Deal", back_populates="product", cascade="all, delete-orphan")
     

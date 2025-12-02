@@ -468,3 +468,194 @@ def update_product_from_amazon(product: models.Product, amazon_data: Dict[str, A
         "deal_updated": deal_result["action"] == "updated",
         "deal_deactivated": deal_result["action"] == "deactivated"
     }
+
+
+@celery_app.task(bind=True, base=DatabaseTask, name='app.tasks.create_catalog_from_product')
+def create_catalog_from_product(self, product_id: int) -> Dict[str, Any]:
+    """
+    Create catalog product from Amazon product with OpenAI optimization
+    
+    Args:
+        product_id: Product ID
+    
+    Returns:
+        Result dict with catalog_id or error
+    """
+    from app.services.openai_service import OpenAIService
+    from slugify import slugify
+    
+    logger.info(f"Creating catalog product for product_id={product_id}")
+    
+    try:
+        # Get product
+        product = self.db.query(models.Product).filter(
+            models.Product.id == product_id
+        ).first()
+        
+        if not product:
+            return {"error": f"Product {product_id} not found"}
+        
+        # Skip if already has catalog
+        if product.catalog_product_id:
+            logger.info(f"Product {product_id} already has catalog {product.catalog_product_id}")
+            return {
+                "skipped": True,
+                "reason": "already_has_catalog",
+                "catalog_id": product.catalog_product_id
+            }
+        
+        # Initialize OpenAI service
+        openai_service = OpenAIService(self.db)
+        
+        # Optimize title
+        category_name = product.category.name if product.category else "Genel"
+        optimized_title = openai_service.optimize_product_title(
+            amazon_title=product.title,
+            category_name=category_name,
+            brand=product.brand
+        )
+        
+        if not optimized_title:
+            optimized_title = product.title  # Fallback
+        
+        # Generate slug
+        slug = slugify(optimized_title)
+        
+        # Check if slug exists, make unique
+        existing_slug = self.db.query(models.CatalogProduct).filter(
+            models.CatalogProduct.slug == slug
+        ).first()
+        
+        if existing_slug:
+            slug = f"{slug}-{product.asin.lower()}"
+        
+        # Generate meta description
+        meta_description = openai_service.generate_meta_description(
+            product_title=optimized_title,
+            category_name=category_name,
+            brand=product.brand
+        )
+        
+        # Create catalog product
+        catalog_product = models.CatalogProduct(
+            title=optimized_title,
+            slug=slug,
+            description=product.description,
+            category_id=product.category_id,
+            brand=product.brand,
+            meta_title=optimized_title,
+            meta_description=meta_description
+        )
+        
+        self.db.add(catalog_product)
+        self.db.flush()
+        
+        # Link product to catalog
+        product.catalog_product_id = catalog_product.id
+        
+        self.db.commit()
+        self.db.refresh(catalog_product)
+        
+        logger.info(
+            f"Created catalog {catalog_product.id} for product {product_id}: "
+            f"'{optimized_title}'"
+        )
+        
+        return {
+            "success": True,
+            "catalog_id": catalog_product.id,
+            "catalog_title": catalog_product.title,
+            "catalog_slug": catalog_product.slug,
+            "product_id": product_id
+        }
+        
+    except Exception as e:
+        self.db.rollback()
+        logger.error(f"Error creating catalog for product {product_id}: {e}")
+        return {
+            "error": str(e),
+            "product_id": product_id
+        }
+
+
+@celery_app.task(bind=True, base=DatabaseTask, name='app.tasks.create_catalogs_batch')
+def create_catalogs_batch(self, batch_size: int = 10, max_batches: int = None) -> Dict[str, Any]:
+    """
+    Batch process: Create catalog products for products without catalog
+    
+    Args:
+        batch_size: Number of products per batch
+        max_batches: Maximum number of batches (None = all)
+    
+    Returns:
+        Stats dict
+    """
+    import time
+    
+    logger.info(f"Starting catalog batch creation: batch_size={batch_size}")
+    
+    stats = {
+        "total_processed": 0,
+        "created": 0,
+        "skipped": 0,
+        "failed": 0,
+        "batches": 0
+    }
+    
+    batch_count = 0
+    
+    while True:
+        # Check max batches limit
+        if max_batches and batch_count >= max_batches:
+            logger.info(f"Reached max_batches limit: {max_batches}")
+            break
+        
+        # Get products without catalog
+        products = self.db.query(models.Product).filter(
+            models.Product.catalog_product_id == None,
+            models.Product.is_active == True
+        ).limit(batch_size).all()
+        
+        if not products:
+            logger.info("No more products to process")
+            break
+        
+        logger.info(f"Processing batch {batch_count + 1}: {len(products)} products")
+        
+        for product in products:
+            try:
+                result = create_catalog_from_product.apply(args=[product.id]).get()
+                
+                stats["total_processed"] += 1
+                
+                if result.get("success"):
+                    stats["created"] += 1
+                elif result.get("skipped"):
+                    stats["skipped"] += 1
+                else:
+                    stats["failed"] += 1
+                
+                # Rate limiting - wait 1 second between products if OpenAI is enabled
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"Error processing product {product.id}: {e}")
+                stats["failed"] += 1
+        
+        batch_count += 1
+        stats["batches"] = batch_count
+        
+        # Commit after each batch
+        self.db.commit()
+        
+        logger.info(
+            f"Batch {batch_count} completed: "
+            f"{stats['created']} created, {stats['skipped']} skipped, {stats['failed']} failed"
+        )
+    
+    logger.info(
+        f"Catalog batch creation completed: "
+        f"{stats['total_processed']} processed in {stats['batches']} batches"
+    )
+    
+    return stats

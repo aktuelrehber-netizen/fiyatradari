@@ -55,3 +55,9 @@ docker==7.0.0
 
 # Template Engine (for notification templates)
 jinja2==3.1.2
+
+# OpenAI
+openai==1.3.0
+
+# Slugify (for SEO URLs)
+python-slugify==8.0.1
